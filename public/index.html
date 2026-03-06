@@ -162,6 +162,7 @@ input[type=range]{width:100%;accent-color:#f97316;cursor:pointer}
     <button class="tab" onclick="setTab('inflacion',this)">🔥 Inflación</button>
     <button class="tab" onclick="setTab('simulador',this)">🛑 Anti-impulso</button>
     <button class="tab" onclick="setTab('ia',this)">🤖 IA</button>
+    <button class="tab" onclick="setTab('config',this)">⚙️ Config</button>
   </div>
 
   <div class="content" id="mainContent"></div>
@@ -173,6 +174,7 @@ input[type=range]{width:100%;accent-color:#f97316;cursor:pointer}
   <button class="nav-btn" id="nav-historial" onclick="setTab('historial',null,'historial')"><span class="nav-icon">📈</span>Historial</button>
   <button class="nav-btn" id="nav-logros" onclick="setTab('logros',null,'logros')"><span class="nav-icon">🏆</span>Logros</button>
   <button class="nav-btn" id="nav-ia" onclick="setTab('ia',null,'ia')"><span class="nav-icon">🤖</span>IA</button>
+  <button class="nav-btn" id="nav-config" onclick="setTab('config',null,'config')"><span class="nav-icon">⚙️</span>Config</button>
 </div>
 
 <div class="toast" id="toast"></div>
@@ -1068,6 +1070,131 @@ function deleteMeta(id) {
   render();
 }
 
+function renderConfig() {
+  const cats = ['comida','transporte','salidas','servicios','ropa'];
+  return `
+  <!-- DATOS PERSONALES -->
+  <div class="card">
+    <div class="sec-title">👤 Tus datos</div>
+    <div class="form-group">
+      <label class="form-label">Ingreso mensual ($)</label>
+      <input type="number" id="cfgIngresos" value="${DB.ingresos}" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace">
+    </div>
+    <div class="form-group">
+      <label class="form-label">Presupuesto mensual total ($)</label>
+      <input type="number" id="cfgPresupuesto" value="${DB.presupuesto}" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace">
+    </div>
+    <button class="btn primary" onclick="guardarDatosBase()">💾 Guardar</button>
+  </div>
+
+  <!-- PRESUPUESTOS POR CATEGORÍA -->
+  <div class="card">
+    <div class="sec-title">📊 Presupuesto por categoría</div>
+    ${cats.map(cat => {
+      const c = CATS[cat];
+      return `<div class="form-group">
+        <label class="form-label">${c.icon} ${c.label} ($)</label>
+        <input type="number" id="presup_${cat}" value="${PRESUP_CATS[cat]}" inputmode="numeric">
+      </div>`;
+    }).join('')}
+    <button class="btn primary" onclick="guardarPresupuestos()">💾 Guardar categorías</button>
+  </div>
+
+  <!-- METAS -->
+  <div class="card">
+    <div class="sec-title">🎯 Tus metas</div>
+    ${DB.metas.length === 0
+      ? `<div style="color:#475569;font-size:13px;text-align:center;padding:12px">No tenés metas todavía.</div>`
+      : DB.metas.map(m => `
+        <div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b">
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="font-size:22px">${m.icon}</span>
+            <div>
+              <div style="color:#f8fafc;font-size:14px;font-weight:600">${m.nombre}</div>
+              <div style="color:#64748b;font-size:12px">${fmt(m.ahorrado)} / ${fmt(m.objetivo)}</div>
+            </div>
+          </div>
+          <button class="btn-sm" style="color:#ef4444" onclick="deleteMeta(${m.id})">🗑 Borrar</button>
+        </div>`).join('')
+    }
+    <button class="btn ghost" style="margin-top:12px" onclick="openModal('meta')">+ Nueva meta</button>
+  </div>
+
+  <!-- TRANSACCIONES -->
+  <div class="card">
+    <div class="sec-title">🕐 Transacciones (${DB.transacciones.length})</div>
+    <div style="max-height:320px;overflow-y:auto">
+      ${DB.transacciones.map(t => {
+        const c = CATS[t.cat] || CATS.otro;
+        return `<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e293b">
+          <div style="display:flex;gap:8px;align-items:center">
+            <span style="font-size:18px">${c.icon}</span>
+            <div>
+              <div style="color:#e2e8f0;font-size:13px">${t.desc}</div>
+              <div style="color:#475569;font-size:11px">${t.fecha}</div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px">
+            <span style="color:${t.tipo === 'gasto' ? '#ef4444' : '#22c55e'};font-weight:700;font-size:13px;font-family:monospace">
+              ${t.tipo === 'gasto' ? '-' : '+'}${fmt(t.monto)}
+            </span>
+            <button onclick="deleteTransaccion(${t.id})" style="background:none;border:none;color:#475569;cursor:pointer;font-size:16px;padding:2px 4px">✕</button>
+          </div>
+        </div>`;
+      }).join('')}
+    </div>
+    <button class="btn" style="background:#450a0a;color:#fca5a5;margin-top:14px" onclick="borrarTodoEjemplo()">🗑 Borrar todas las transacciones de ejemplo</button>
+  </div>
+
+  <!-- RESET -->
+  <div class="card danger">
+    <div class="sec-title" style="color:#ef4444">⚠️ Zona peligrosa</div>
+    <div style="color:#64748b;font-size:13px;margin-bottom:12px">Esto borra TODO y no tiene vuelta atrás.</div>
+    <button class="btn" style="background:#450a0a;color:#fca5a5" onclick="resetTotal()">🔴 Resetear app completa</button>
+  </div>`;
+}
+
+function guardarDatosBase() {
+  const ing = parseFloat(document.getElementById('cfgIngresos').value);
+  const pres = parseFloat(document.getElementById('cfgPresupuesto').value);
+  if (!ing || !pres) { toast('⚠️ Ingresá valores válidos'); return; }
+  DB.ingresos = ing;
+  DB.presupuesto = pres;
+  saveData();
+  toast('✅ Datos guardados');
+}
+
+function guardarPresupuestos() {
+  ['comida','transporte','salidas','servicios','ropa'].forEach(cat => {
+    const el = document.getElementById('presup_' + cat);
+    if (el && parseFloat(el.value) > 0) PRESUP_CATS[cat] = parseFloat(el.value);
+  });
+  toast('✅ Presupuestos guardados');
+  render();
+}
+
+function deleteTransaccion(id) {
+  DB.transacciones = DB.transacciones.filter(t => t.id !== id);
+  saveData();
+  render();
+}
+
+function borrarTodoEjemplo() {
+  if (!confirm('¿Borrar TODAS las transacciones? Empezás desde cero.')) return;
+  DB.transacciones = [];
+  saveData();
+  toast('✅ Transacciones borradas. ¡Ahora cargá las tuyas!');
+  render();
+}
+
+function resetTotal() {
+  if (!confirm('⚠️ ¿Resetear TODO? Perdés todos tus datos.')) return;
+  localStorage.removeItem(STORAGE_KEY);
+  DB = getDefaultData();
+  toast('App reseteada');
+  setTab('panel');
+}
+
 // ═══════════════════════════════════════════════════
 //  RENDER ENGINE
 // ═══════════════════════════════════════════════════
@@ -1119,6 +1246,7 @@ function render() {
     case 'inflacion': c.innerHTML = renderInflacion(); break;
     case 'simulador': c.innerHTML = renderSimulador(); break;
     case 'ia':        c.innerHTML = renderIA(); break;
+    case 'config':    c.innerHTML = renderConfig(); break;
   }
 
   animateBars();
