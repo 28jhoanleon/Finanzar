@@ -181,7 +181,16 @@ input[type=text],input[type=number],select{background:var(--bg3);border-color:va
 // ─── STORAGE ─────────────────────────────────────────────────────────────────
 var SKEY = 'finanzas_ar_v4';
 function loadDB() {
-  try { var r = localStorage.getItem(SKEY); if (r) return JSON.parse(r); } catch(e) {}
+  try { var r = localStorage.getItem(SKEY); if (r) {
+    var d = JSON.parse(r);
+    // Migration: asignar campo orden si no existe
+    if(d.billeteras) {
+      d.billeteras.forEach(function(b,i){ if(b.orden===undefined||b.orden===null) b.orden=i; });
+      // Ordenar por orden para garantizar consistencia
+      d.billeteras.sort(function(a,b){return (a.orden||0)-(b.orden||0);});
+    }
+    return d;
+  }} catch(e) {}
   return defaultDB();
 }
 function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
@@ -469,7 +478,7 @@ function renderPanel() {
   var tieneLimite=DB.presupuesto>0;
   var limiteRef=tieneLimite?DB.presupuesto:DB.ingresos;
   var gp=tieneLimite?pct(gastos,limiteRef):pct(gastos,DB.ingresos);
-  var sem=semaforo(tieneLimite?gp:Math.min(gp,89)); // sin límite nunca rojo
+  var sem=tieneLimite?semaforo(gp):{emoji:'💙',msg:'Sin límite configurado'};
   var restante=saldo-gastos; // basado en saldo real
   var lvl=getLevel(), dolar=getDolar();
   var diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
@@ -483,7 +492,7 @@ function renderPanel() {
   var alerts=[];
   Object.keys(gc).forEach(function(cat){var g=gc[cat],p2=PRESUP[cat];if(p2&&g>p2)alerts.push({icon:(CATS[cat]||{}).icon||'⚠️',txt:'Superaste '+((CATS[cat]||{label:cat}).label)+' por '+fmt(g-p2),color:'#ef4444'});});
   if(alerts.length===0) alerts.push({icon:'✅',txt:'Todo bajo control este mes. Seguí así.',color:'#22c55e'});
-  var bills=(DB.billeteras||[]).map(function(b){
+  var bills=(DB.billeteras||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0);}).map(function(b){
     return '<div style="background:#1e293b;border-radius:14px;padding:14px 16px;min-width:120px;border:1px solid '+b.color+'33;flex-shrink:0">'
       +'<div style="font-size:22px">'+b.icon+'</div><div style="color:#f8fafc;font-weight:700;font-size:13px;margin-top:6px">'+b.nombre+'</div>'
       +'<div style="color:'+b.color+';font-weight:800;font-size:14px;font-family:monospace;margin-top:4px">'+fmt(b.saldo)+'</div></div>';
@@ -1008,7 +1017,7 @@ function renderIA() {
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 var billSort = 'custom'; // 'alpha' | 'saldo' | 'custom'
 function renderConfig() {
-  var bills = (DB.billeteras||[]).slice();
+  var bills = (DB.billeteras||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0);});
   if(billSort==='alpha') bills.sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
   else if(billSort==='saldo') bills.sort(function(a,b){return b.saldo-a.saldo;});
   var billsHtml = bills.map(function(b,i){
@@ -1042,7 +1051,7 @@ function renderConfig() {
     :DB.transacciones.map(function(t){var c=CATS[t.cat]||CATS.otro;
       return '<div style="display:flex;justify-content:space-between;align-items:center;padding:8px 0;border-bottom:1px solid #1e293b">'
         +'<div style="display:flex;gap:8px;align-items:center"><span style="font-size:18px">'+c.icon+'</span>'
-        +'<div><div style="color:#e2e8f0;font-size:13px">'+t.desc+'</div><div style="color:#475569;font-size:11px">'+t.fecha+'</div></div></div>'
+        +'<div><div style="color:#e2e8f0;font-size:13px">'+t.desc+'</div><div style="color:#475569;font-size:11px">'+t.fecha+function(){var bx=(t.billetera&&(DB.billeteras||[]).find(function(b){return b.id===t.billetera;}))||null;return bx?' · <span style="color:'+bx.color+'">'+bx.icon+'</span>':'';}()+'</div></div></div>'
         +'<div style="display:flex;align-items:center;gap:6px"><span style="color:'+(t.tipo==='gasto'?'#ef4444':'#22c55e')+';font-weight:700;font-size:13px;font-family:monospace">'+(t.tipo==='gasto'?'-':'+')+fmt(t.monto)+'</span>'
         +'<button onclick="openModal(\'editTx\',DB.transacciones.find(function(x){return x.id==='+t.id+'}))" style="background:none;border:none;color:#475569;cursor:pointer;font-size:15px;padding:2px 5px">✏️</button>'
         +'<button onclick="deleteTx('+t.id+')" style="background:none;border:none;color:#475569;cursor:pointer;font-size:16px;padding:2px 5px">✕</button></div></div>';
@@ -1147,19 +1156,28 @@ function borrarCat(key) {
 var billDragId = null;
 function moverBill(id, dir) {
   var bills = DB.billeteras;
+  // Primero ordenar por orden actual para garantizar secuencia correcta
+  bills.sort(function(a,b){return (a.orden||0)-(b.orden||0);});
   var idx = bills.findIndex(function(b){return b.id===id;});
   var newIdx = idx+dir;
-  if(newIdx<0||newIdx>=bills.length) return;
+  if(idx<0||newIdx<0||newIdx>=bills.length) return;
   var tmp=bills[idx]; bills[idx]=bills[newIdx]; bills[newIdx]=tmp;
+  // Re-asignar orden secuencialmente
   bills.forEach(function(b,i){b.orden=i;});
   billSort='custom';
   saveDB(); render();
+  toast('✅ Orden guardado');
 }
 function editBilletera(id) { var b=(DB.billeteras||[]).find(function(x){return x.id===id;}); if(b)openModal('editBilletera',b); }
 function guardarBilletera(id) {
   var el=document.getElementById('editBillSaldo'); if(!el)return;
   var b=(DB.billeteras||[]).find(function(x){return x.id===id;});
-  if(b){b.saldo=parseFloat(el.value)||0;saveDB();toast('✅ Saldo actualizado');}
+  if(b){
+    b.saldo=rawNum('editBillSaldo');
+    var nomEl=document.getElementById('editBillNombre'); if(nomEl&&nomEl.value.trim()) b.nombre=nomEl.value.trim();
+    var iconEl=document.getElementById('editBillIcon'); if(iconEl&&iconEl.value.trim()) b.icon=iconEl.value.trim();
+    saveDB();toast('✅ Billetera actualizada');
+  }
   closeModal(); render();
 }
 function agregarBilletera() {
@@ -1168,12 +1186,14 @@ function agregarBilletera() {
   if(!nom){toast('⚠️ Ingresá un nombre');return;}
   var cols=['#3b82f6','#a855f7','#f97316','#22c55e','#ef4444','#fbbf24','#009ee3'];
   if(!DB.billeteras)DB.billeteras=[];
-  DB.billeteras.push({id:genId(),nombre:nom,icon:icon,saldo:saldo,color:cols[DB.billeteras.length%cols.length]});
+  var maxOrden=DB.billeteras.reduce(function(m,b){return Math.max(m,b.orden||0);},0);
+  DB.billeteras.push({id:genId(),nombre:nom,icon:icon,saldo:saldo,color:cols[DB.billeteras.length%cols.length],orden:maxOrden+1});
   saveDB(); addXP(20,'Nueva billetera'); closeModal(); render();
 }
 function deleteBilletera(id) {
   if(!confirm('¿Eliminar esta billetera?'))return;
   DB.billeteras=(DB.billeteras||[]).filter(function(b){return b.id!==id;});
+  DB.billeteras.sort(function(a,b){return (a.orden||0)-(b.orden||0);}).forEach(function(b,i){b.orden=i;});
   saveDB(); toast('Billetera eliminada'); closeModal(); render();
 }
 function agregarMeta() {
@@ -1371,8 +1391,10 @@ function openModal(type,data) {
   } else if(type==='editBilletera'){
     var b=data;
     html='<div class="mtitle"><span>'+b.icon+' '+b.nombre+'</span><button class="mclose" onclick="closeModal()">✕</button></div>'
+      +'<div class="fg"><label class="flbl">Nombre</label><input type="text" id="editBillNombre" value="'+b.nombre+'"></div>'
+      +'<div class="fg"><label class="flbl">Ícono</label><input type="text" id="editBillIcon" value="'+b.icon+'" maxlength="2" style="font-size:22px;width:60px"></div>'
       +'<div class="fg"><label class="flbl">Saldo actual ($)</label><input type="number" id="editBillSaldo" value="'+b.saldo+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace"></div>'
-      +'<button class="btn pri" onclick="guardarBilletera('+b.id+')">Actualizar saldo</button>'
+      +'<button class="btn pri" onclick="guardarBilletera('+b.id+')">💾 Guardar</button>'
       +'<button class="btn dan" style="margin-top:10px" onclick="deleteBilletera('+b.id+')">🗑 Eliminar billetera</button>';
   } else if(type==='nuevaDeuda'){
     html='<div class="mtitle"><span>Nueva deuda / cuota</span><button class="mclose" onclick="closeModal()">✕</button></div>'
