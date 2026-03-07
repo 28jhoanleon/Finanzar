@@ -12,7 +12,7 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
 <style>
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-body{background:#060b14;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding-bottom:90px;overscroll-behavior:none}
+body{background:#060b14;color:#f8fafc;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif;min-height:100vh;padding-bottom:160px;overscroll-behavior:none}
 .app{max-width:430px;margin:0 auto}
 .header{padding:52px 20px 14px;display:flex;justify-content:space-between;align-items:center;position:sticky;top:0;background:#060b14ee;backdrop-filter:blur(16px);z-index:100;border-bottom:1px solid #1e293b}
 .header-title{font-size:20px;font-weight:800}
@@ -130,7 +130,7 @@ input[type=text],input[type=number],select{background:var(--bg3);border-color:va
 <div id="mc"></div>
 
 <!-- FAB rápido -->
-<button id="fabBtn" onclick="toggleFAB()" style="position:fixed;bottom:86px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;color:#fff;font-size:24px;cursor:pointer;z-index:150;box-shadow:0 4px 20px #3b82f688;transition:transform .2s;display:flex;align-items:center;justify-content:center">⚡</button>
+<button id="fabBtn" onclick="toggleFAB()" style="position:fixed;bottom:96px;right:16px;width:52px;height:52px;border-radius:50%;background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;color:#fff;font-size:24px;cursor:pointer;z-index:150;box-shadow:0 4px 20px #3b82f688;transition:transform .2s;display:flex;align-items:center;justify-content:center">⚡</button>
 
 <!-- Quick widget -->
 <div id="quickWidget" style="display:none;position:fixed;bottom:86px;right:0;left:0;margin:0 auto;max-width:430px;z-index:149;padding:0 12px">
@@ -155,6 +155,8 @@ input[type=text],input[type=number],select{background:var(--bg3);border-color:va
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:10px" id="qKeypad"></div>
       <!-- Descripción rápida -->
       <input type="text" id="qDesc" placeholder="Descripción (opcional)" style="margin-bottom:10px;font-size:14px">
+      <!-- Billetera -->
+      <div id="qBillBtns" style="display:flex;gap:6px;overflow-x:auto;margin-bottom:10px;scrollbar-width:none"></div>
       <button onclick="guardarRapido()" style="width:100%;background:linear-gradient(135deg,#3b82f6,#6366f1);border:none;border-radius:12px;padding:14px;color:#fff;font-size:16px;font-weight:700;cursor:pointer;font-family:inherit">✅ Guardar</button>
     </div>
 
@@ -231,6 +233,26 @@ var PRESUP = {comida:200000,transporte:80000,salidas:120000,servicios:100000,rop
 var INFLATION = 0.042;
 
 // ─── COMPUTED ─────────────────────────────────────────────────────────────────
+function getResumenSemanal() {
+  var hoy = new Date(), gastosSem = 0, ingresosSem = 0, gastosSemAnt = 0;
+  var inicioSem = new Date(hoy); inicioSem.setDate(hoy.getDate() - hoy.getDay() + (hoy.getDay()===0?-6:1)); inicioSem.setHours(0,0,0,0);
+  var inicioSemAnt = new Date(inicioSem); inicioSemAnt.setDate(inicioSem.getDate()-7);
+  var finSemAnt = new Date(inicioSem); finSemAnt.setDate(inicioSem.getDate()-1);
+  DB.transacciones.forEach(function(t){
+    var d = new Date(t.fecha+'T12:00:00');
+    if(d>=inicioSem && d<=hoy) {
+      if(t.tipo==='gasto') gastosSem+=t.monto;
+      else ingresosSem+=t.monto;
+    } else if(d>=inicioSemAnt && d<=finSemAnt) {
+      if(t.tipo==='gasto') gastosSemAnt+=t.monto;
+    }
+  });
+  var diff = gastosSem - gastosSemAnt;
+  var diasTranscurridos = hoy.getDay()===0?7:hoy.getDay(); // lunes=1
+  var proySem = diasTranscurridos>0 ? Math.round(gastosSem/diasTranscurridos*7) : 0;
+  return { gastos:gastosSem, ingresos:ingresosSem, semAnt:gastosSemAnt, diff:diff, proy:proySem, dias:diasTranscurridos };
+}
+
 function getMesActual() {
   var now = new Date(), y = now.getFullYear(), m = now.getMonth();
   return DB.transacciones.filter(function(t) {
@@ -271,17 +293,17 @@ function setupNumInput(el) {
   if(!el||el._fmtReady) return;
   el._fmtReady = true;
   function update() {
-    var raw = el.value.replace(/\./g,'').replace(/[^0-9]/g,'');
+    var raw = el.value.replace(/\./g,'').replace(/,/g,'').replace(/[^0-9]/g,'');
     el._rawVal = raw ? parseInt(raw) : '';
-    if(raw.length > 1) {
+    if(raw.length >= 1) {
       var pos = el.selectionStart, oldLen = el.value.length;
-      el.value = parseInt(raw).toLocaleString('es-AR');
-      // keep cursor roughly in place
+      el.value = raw ? parseInt(raw).toLocaleString('es-AR') : '';
       var diff = el.value.length - oldLen;
-      try{ el.setSelectionRange(pos+diff, pos+diff); } catch(e){}
+      try{ el.setSelectionRange(Math.max(0,pos+diff), Math.max(0,pos+diff)); } catch(e){}
     }
   }
   el.addEventListener('input', update);
+  el.addEventListener('paste', function(){ setTimeout(update, 0); });
   el.addEventListener('focus', function(){ if(!el.value) el.value=''; });
 }
 function getNumVal(id) {
@@ -528,7 +550,52 @@ function renderPanel() {
     +alerts.map(function(a){return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px"><span>'+a.icon+'</span><span style="color:'+a.color+'">'+a.txt+'</span></div>';}).join('')+'</div>'
     + pieHtml
     +'<div class="card"><div class="sectitle">📊 Por categoría</div>'+catRows+'</div>'
-    +'<div class="card"><div class="sectitle">🕐 Últimos movimientos</div>'+movs+'</div>';
+    +'<div class="card"><div class="sectitle">🕐 Últimos movimientos</div>'+movs+'</div>'
+    + renderResumenSemanal();
+}
+
+// ─── RESUMEN SEMANAL ──────────────────────────────────────────────────────────
+function renderResumenSemanal() {
+  var s = getResumenSemanal();
+  if(s.gastos===0 && s.semAnt===0) return ''; // nada que mostrar
+  var diffColor = s.diff<=0 ? '#22c55e' : '#ef4444';
+  var diffIcon = s.diff<=0 ? '📉' : '📈';
+  var diffTxt = s.diff===0 ? 'Igual que la semana pasada'
+    : (s.diff>0 ? '+'+fmt(s.diff)+' más que la semana pasada' : fmt(Math.abs(s.diff))+' menos que la semana pasada');
+  var dias = ['Dom','Lun','Mar','Mié','Jue','Vie','Sáb'];
+  var hoy = new Date().getDay();
+  // Gasto por día de esta semana
+  var porDia = {};
+  var inicioSem = new Date(); inicioSem.setDate(new Date().getDate() - hoy + (hoy===0?-6:1)); inicioSem.setHours(0,0,0,0);
+  DB.transacciones.forEach(function(t){
+    if(t.tipo!=='gasto') return;
+    var d=new Date(t.fecha+'T12:00:00');
+    if(d>=inicioSem){ var k=d.getDay(); porDia[k]=(porDia[k]||0)+t.monto; }
+  });
+  var maxDia=Math.max.apply(null,Object.values(porDia).concat([1]));
+  var barsDias=[1,2,3,4,5,6,0].map(function(d){
+    var g=porDia[d]||0, pct=Math.round(g/maxDia*100), isPast=d<=hoy&&!(d===0&&hoy!==0);
+    return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">'
+      +'<div style="font-size:9px;color:#475569">'+fmt(g).replace('$\u202f','$').replace('$0','')+'</div>'
+      +'<div style="width:100%;height:40px;background:#1e293b;border-radius:4px;display:flex;align-items:flex-end;overflow:hidden">'
+      +(g>0?'<div style="width:100%;height:'+pct+'%;background:'+(isPast?'#3b82f6':'#1e293b88')+';border-radius:4px 4px 0 0;transition:height .5s"></div>':'')
+      +'</div>'
+      +'<div style="font-size:9px;color:'+(d===hoy?'#f8fafc':'#475569')+'">'+dias[d]+'</div>'
+      +'</div>';
+  }).join('');
+  return '<div class="card" style="background:#0a1020;border-color:#3b82f633">'
+    +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px">'
+    +'<div class="sectitle" style="margin:0">📅 Esta semana</div>'
+    +'<div style="color:#64748b;font-size:11px">'+s.dias+' días registrados</div></div>'
+    +'<div class="g2" style="margin-bottom:12px">'
+    +'<div style="background:#1e293b;border-radius:12px;padding:12px;text-align:center"><div class="lbl">Gastos</div><div style="color:#ef4444;font-weight:800;font-size:18px;font-family:monospace;margin-top:4px">'+fmt(s.gastos)+'</div></div>'
+    +'<div style="background:#1e293b;border-radius:12px;padding:12px;text-align:center"><div class="lbl">Proyección</div><div style="color:#f8fafc;font-weight:800;font-size:18px;font-family:monospace;margin-top:4px">'+fmt(s.proy)+'</div></div>'
+    +'</div>'
+    +'<div style="display:flex;gap:4px;margin-bottom:12px;align-items:flex-end">'+barsDias+'</div>'
+    +(s.semAnt>0?'<div style="background:#1e293b;border-radius:10px;padding:10px;text-align:center;font-size:12px">'
+      +'<span style="color:'+diffColor+'">'+diffIcon+' '+diffTxt+'</span>'
+      +'<div style="color:#475569;font-size:11px;margin-top:2px">Sem. anterior: '+fmt(s.semAnt)+'</div></div>':'')
+    +'</div>';
 }
 
 // ─── METAS ────────────────────────────────────────────────────────────────────
@@ -1684,7 +1751,7 @@ function confirmarVoz(tipo) {
 }
 
 // ─── QUICK WIDGET ─────────────────────────────────────────────────────────────
-var qMonto = '', qTipo = 'gasto', qCat = 'comida', qWidgetOpen = false;
+var qMonto = '', qTipo = 'gasto', qCat = 'comida', qWidgetOpen = false, qBilletera = null;
 
 function toggleFAB() {
   qWidgetOpen = !qWidgetOpen;
@@ -1739,6 +1806,16 @@ function initQKeypad() {
     }).join('');
     qCat = 'comida';
   }
+  // Billetera buttons
+  var billDiv = document.getElementById('qBillBtns');
+  if(billDiv) {
+    var bills = DB.billeteras||[];
+    qBilletera = bills.length ? bills[0].id : null;
+    billDiv.innerHTML = bills.map(function(b,i){
+      var active = i===0;
+      return '<button onclick="setQBill('+b.id+')" id="qbill_'+b.id+'" style="flex-shrink:0;background:'+(active?b.color+'33':'#1e293b')+';color:'+(active?b.color:'#64748b')+';border:'+(active?'1px solid '+b.color+'66':'none')+';border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;white-space:nowrap">'+b.icon+' '+b.nombre+'</button>';
+    }).join('');
+  }
   // Numpad
   var kp = document.getElementById('qKeypad');
   if(!kp) return;
@@ -1763,19 +1840,37 @@ function updateQDisplay() {
   el.textContent = n > 0 ? (qTipo==='gasto'?'-':'+')+fmt(n) : '$0';
 }
 
+function setQBill(id) {
+  qBilletera = id;
+  (DB.billeteras||[]).forEach(function(b){
+    var btn = document.getElementById('qbill_'+b.id);
+    if(!btn) return;
+    var active = b.id===id;
+    btn.style.background = active ? b.color+'33' : '#1e293b';
+    btn.style.color = active ? b.color : '#64748b';
+    btn.style.border = active ? '1px solid '+b.color+'66' : 'none';
+  });
+}
+
 function guardarRapido() {
   var monto = parseInt(qMonto||'0');
   if(!monto || monto<=0) { toast('⚠️ Ingresá un monto'); return; }
   var desc = (document.getElementById('qDesc')||{}).value || (CATS[qCat]||{label:'Gasto'}).label;
   if(!desc.trim()) desc = (CATS[qCat]||{label:'Gasto'}).label;
-  DB.transacciones.unshift({id:genId(),tipo:qTipo,monto:monto,montoOrig:monto,moneda:'ARS',cat:qCat,desc:desc.trim(),fecha:new Date().toISOString().split('T')[0]});
+  // Afectar saldo de billetera seleccionada
+  if(qBilletera) {
+    var bill = (DB.billeteras||[]).find(function(b){return b.id===qBilletera;});
+    if(bill) bill.saldo += qTipo==='gasto' ? -monto : monto;
+  }
+  DB.transacciones.unshift({id:genId(),tipo:qTipo,monto:monto,montoOrig:monto,moneda:'ARS',cat:qCat,desc:desc.trim(),billetera:qBilletera,fecha:new Date().toISOString().slice(0,10)});
   DB.racha = Math.min(DB.racha+1,365);
   if(DB.logros.indexOf('primer_gasto')<0) DB.logros.push('primer_gasto');
   actualizarHistorialMensual();
   saveDB();
   addXP(qTipo==='ingreso'?20:15,'Gasto rápido ⚡');
   cerrarFAB();
-  toast((qTipo==='gasto'?'💸 -':' 💰 +')+fmt(monto)+' guardado ⚡');
+  var billNom = qBilletera ? ((DB.billeteras||[]).find(function(b){return b.id===qBilletera;})||{}).nombre||'' : '';
+  toast((qTipo==='gasto'?'💸 -':'💰 +')+fmt(monto)+(billNom?' · '+billNom:'')+' ⚡');
   if(currentTab==='panel') render();
 }
 
