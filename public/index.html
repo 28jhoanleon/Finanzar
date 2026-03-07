@@ -684,55 +684,149 @@ function renderMetas() {
 
 // ─── HISTORIAL ────────────────────────────────────────────────────────────────
 function renderHistorial() {
-  var months=DB.historialMensual.slice(-7);
-  var labels=months.map(function(m){return m.mes;});
-  var ahorros=months.map(function(m){return m.ingresos-m.gastos;});
-  var gastosList=months.map(function(m){return m.gastos;});
-  var ingresosList=months.map(function(m){return m.ingresos;});
-  var gc=getGastosCat();
-  var catLabels=Object.keys(gc).map(function(k){return (CATS[k]||{label:k}).label;});
-  var catData=Object.values(gc);
-  var catColors=Object.keys(gc).map(function(k){return (CATS[k]||{color:'#64748b'}).color;});
-  var totalAh=ahorros.reduce(function(s,a){return s+a;},0);
-  var maxAh=ahorros.length?Math.max.apply(null,ahorros):0;
-  var mejorMes=months[ahorros.indexOf(maxAh)];
+  var months = DB.historialMensual.slice(-6);
+  var gc = getGastosCat();
+  var gcKeys = Object.keys(gc).filter(function(k){return gc[k]>0;});
+  gcKeys.sort(function(a,b){return gc[b]-gc[a];});
+  var totalGastosCat = gcKeys.reduce(function(s,k){return s+gc[k];},0)||1;
 
-  setTimeout(function(){
-    if(activeChart){try{activeChart.destroy();}catch(e){}activeChart=null;}
-    var c3=document.getElementById('chartTorta');
-    if(c3&&catData.length>0){
-      new Chart(c3,{type:'doughnut',
-        data:{labels:catLabels,datasets:[{data:catData,backgroundColor:catColors,borderColor:'#060b14',borderWidth:3}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{color:'#94a3b8',font:{size:11},padding:12}}}}});
-    }
-    var c1=document.getElementById('chartPatrimonio');
-    if(c1){
-      activeChart=new Chart(c1,{type:'line',
-        data:{labels:labels,datasets:[{label:'Ahorro',data:ahorros,borderColor:'#3b82f6',backgroundColor:'rgba(59,130,246,0.15)',fill:true,tension:0.4,pointBackgroundColor:'#3b82f6',pointRadius:5}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{display:false}},scales:{x:{ticks:{color:'#64748b',font:{size:11}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10},callback:function(v){return '$'+(v/1000).toFixed(0)+'k';}},grid:{color:'#1e293b'}}}}});
-    }
-    var c2=document.getElementById('chartBarras');
-    if(c2){
-      new Chart(c2,{type:'bar',
-        data:{labels:labels,datasets:[{label:'Ingresos',data:ingresosList,backgroundColor:'#22c55e88',borderRadius:6},{label:'Gastos',data:gastosList,backgroundColor:'#ef444488',borderRadius:6}]},
-        options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{labels:{color:'#94a3b8',font:{size:11}}}},scales:{x:{ticks:{color:'#64748b',font:{size:11}},grid:{color:'#1e293b'}},y:{ticks:{color:'#64748b',font:{size:10},callback:function(v){return '$'+(v/1000).toFixed(0)+'k';}},grid:{color:'#1e293b'}}}}});
-    }
-  },120);
+  if(months.length === 0 && gcKeys.length === 0) {
+    return '<div style="text-align:center;padding:60px 20px">'
+      +'<div style="font-size:48px;margin-bottom:16px">📭</div>'
+      +'<div style="color:#f8fafc;font-size:18px;font-weight:700;margin-bottom:8px">Todavía no hay historial</div>'
+      +'<div style="color:#475569;font-size:14px">Registrá movimientos y acá vas a ver tus gráficos mes a mes.</div>'
+      +'</div>';
+  }
 
-  var detalle=months.slice().reverse().map(function(m){var a=m.ingresos-m.gastos;
-    return '<div class="row"><span style="color:#94a3b8;font-weight:600">'+m.mes+'</span>'
-      +'<div style="display:flex;gap:16px;font-size:12px;font-family:monospace">'
-      +'<span style="color:#22c55e">'+fmt(m.ingresos)+'</span><span style="color:#ef4444">-'+fmt(m.gastos)+'</span>'
-      +'<span style="color:'+(a>=0?'#60a5fa':'#f97316')+';font-weight:700">'+(a>=0?'+':'')+fmt(a)+'</span></div></div>';
-  }).join('');
+  // ── 1. BARRAS INGRESOS VS GASTOS ──────────────────────────────────────────
+  var barsHtml = '';
+  if(months.length > 0) {
+    var maxVal = Math.max.apply(null, months.map(function(m){ return Math.max(m.ingresos||0, m.gastos||0, 1); }));
+    var barRows = months.map(function(m) {
+      var ing = m.ingresos||0, gas = m.gastos||0;
+      var diff = ing - gas;
+      var diffColor = diff >= 0 ? '#22c55e' : '#ef4444';
+      var diffLabel = diff >= 0 ? '+'+fmt(diff) : fmt(diff);
+      var hIng = Math.round((ing/maxVal)*72), hGas = Math.round((gas/maxVal)*72);
+      return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">'
+        // bars
+        +'<div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:72px">'
+        +'<div style="flex:1;background:#22c55e;border-radius:4px 4px 0 0;height:'+hIng+'px;min-height:'+(ing>0?'3':'0')+'px;opacity:0.85"></div>'
+        +'<div style="flex:1;background:#ef4444;border-radius:4px 4px 0 0;height:'+hGas+'px;min-height:'+(gas>0?'3':'0')+'px;opacity:0.85"></div>'
+        +'</div>'
+        +'<div style="font-size:9px;color:#94a3b8;font-weight:600">'+m.mes+'</div>'
+        +'<div style="font-size:9px;color:'+diffColor+';font-weight:700">'+diffLabel+'</div>'
+        +'</div>';
+    }).join('');
 
-  return '<div class="card"><div class="sectitle">🥧 Gastos por categoría este mes</div>'
-    +(catData.length===0?'<div style="color:#475569;text-align:center;padding:20px;font-size:13px">Sin gastos este mes.</div>':'<div class="chart-wrap" style="height:240px"><canvas id="chartTorta"></canvas></div>')+'</div>'
-    +'<div class="card"><div class="sectitle">📈 Evolución patrimonial</div><div class="chart-wrap"><canvas id="chartPatrimonio"></canvas></div></div>'
-    +'<div class="g2"><div class="card" style="text-align:center"><div class="lbl">Ahorro total</div><div style="color:#22c55e;font-size:20px;font-weight:800;margin-top:6px;font-family:monospace">'+fmt(totalAh)+'</div></div>'
-    +'<div class="card" style="text-align:center"><div class="lbl">Mejor mes</div><div style="color:#f8fafc;font-size:20px;font-weight:800;margin-top:6px">'+(mejorMes?mejorMes.mes:'-')+'</div><div style="color:#22c55e;font-size:11px;margin-top:4px">'+fmt(maxAh)+'</div></div></div>'
-    +'<div class="card"><div class="sectitle">💸 Ingresos vs Gastos</div><div class="chart-wrap"><canvas id="chartBarras"></canvas></div></div>'
-    +'<div class="card"><div class="sectitle">📋 Detalle mensual</div>'+detalle+'</div>';
+    // last month stat cards
+    var last = months[months.length-1];
+    var lastDiff = (last.ingresos||0) - (last.gastos||0);
+    var lastColor = lastDiff >= 0 ? '#22c55e' : '#ef4444';
+    var lastLabel = lastDiff >= 0 ? 'Superávit' : 'Déficit';
+    var bestMonth = months.reduce(function(best,m){ return (m.ingresos-m.gastos) > (best.ingresos-best.gastos) ? m : best; }, months[0]);
+
+    barsHtml = '<div class="card" style="background:#0a0f1e;border-color:#1e293b">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
+      +'<div class="sectitle" style="margin:0">📅 Ingresos vs Gastos</div>'
+      +'<div style="display:flex;gap:10px;font-size:11px">'
+      +'<span style="color:#22c55e">■ Ingresos</span><span style="color:#ef4444">■ Gastos</span>'
+      +'</div></div>'
+      +'<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:16px">'+barRows+'</div>'
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+      +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
+      +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Este mes</div>'
+      +'<div style="color:'+lastColor+';font-size:14px;font-weight:800;font-family:monospace">'+fmt(Math.abs(lastDiff))+'</div>'
+      +'<div style="color:'+lastColor+';font-size:10px;margin-top:2px">'+lastLabel+'</div>'
+      +'</div>'
+      +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
+      +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Mejor mes</div>'
+      +'<div style="color:#f8fafc;font-size:14px;font-weight:800">'+bestMonth.mes+'</div>'
+      +'<div style="color:#22c55e;font-size:10px;margin-top:2px">'+fmt(Math.max(0,bestMonth.ingresos-bestMonth.gastos))+'</div>'
+      +'</div>'
+      +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
+      +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Promedio gastos</div>'
+      +'<div style="color:#f8fafc;font-size:14px;font-weight:800;font-family:monospace">'+fmt(Math.round(months.reduce(function(s,m){return s+(m.gastos||0);},0)/months.length))+'</div>'
+      +'</div>'
+      +'</div></div>';
+  }
+
+  // ── 2. DISTRIBUCIÓN CATEGORÍAS ────────────────────────────────────────────
+  var catHtml = '';
+  if(gcKeys.length > 0) {
+    // SVG donut
+    var radius=50, cx=65, cy=65, strokeW=13;
+    var circ=2*Math.PI*radius, offset=0;
+    var arcs=gcKeys.map(function(k){
+      var pct=gc[k]/totalGastosCat;
+      var dash=circ*pct-1.5, gap=circ-dash;
+      var arc='<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none"'
+        +' stroke="'+(CATS[k]||{color:'#64748b'}).color+'"'
+        +' stroke-width="'+strokeW+'"'
+        +' stroke-dasharray="'+dash.toFixed(2)+' '+(gap+1.5).toFixed(2)+'"'
+        +' stroke-dashoffset="'+(-(offset)).toFixed(2)+'"'
+        +' stroke-linecap="butt"></circle>';
+      offset+=circ*pct;
+      return arc;
+    }).join('');
+    var topCat=CATS[gcKeys[0]]||{label:'',icon:''};
+    var topPct=Math.round(gc[gcKeys[0]]/totalGastosCat*100);
+    var donut='<svg width="130" height="130" viewBox="0 0 130 130" style="flex-shrink:0">'
+      +'<circle cx="'+cx+'" cy="'+cy+'" r="'+radius+'" fill="none" stroke="#1e293b" stroke-width="'+strokeW+'"/>'
+      +arcs
+      +'<text x="'+cx+'" y="'+(cy-9)+'" text-anchor="middle" fill="#f8fafc" font-size="18" font-weight="800" font-family="monospace">'+topPct+'%</text>'
+      +'<text x="'+cx+'" y="'+(cy+7)+'" text-anchor="middle" fill="#94a3b8" font-size="10">'+topCat.label+'</text>'
+      +'<text x="'+cx+'" y="'+(cy+20)+'" text-anchor="middle" font-size="14">'+topCat.icon+'</text>'
+      +'</svg>';
+
+    var bars2=gcKeys.slice(0,7).map(function(k){
+      var c=CATS[k]||{color:'#64748b',icon:'•',label:k};
+      var pct=Math.round(gc[k]/totalGastosCat*100);
+      return '<div style="margin-bottom:9px">'
+        +'<div style="display:flex;justify-content:space-between;margin-bottom:3px">'
+        +'<span style="font-size:12px;color:#e2e8f0">'+c.icon+' '+c.label+'</span>'
+        +'<span style="font-size:11px;color:'+c.color+';font-weight:700;font-family:monospace">'+pct+'%</span>'
+        +'</div>'
+        +'<div style="background:#1e293b;border-radius:99px;height:5px;overflow:hidden">'
+        +'<div style="width:'+pct+'%;height:100%;background:linear-gradient(90deg,'+c.color+'cc,'+c.color+');border-radius:99px"></div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
+
+    catHtml='<div class="card" style="background:#0a0f1e;border-color:#1e293b">'
+      +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
+      +'<div class="sectitle" style="margin:0">🏷️ ¿En qué gasté este mes?</div>'
+      +'<div style="color:#64748b;font-size:11px">'+fmt(totalGastosCat)+'</div>'
+      +'</div>'
+      +'<div style="display:flex;gap:16px;align-items:center">'
+      +donut+'<div style="flex:1;min-width:0">'+bars2+'</div>'
+      +'</div></div>';
+  }
+
+  // ── 3. DETALLE TABLA ──────────────────────────────────────────────────────
+  var detalleHtml = months.length > 0
+    ? '<div class="card" style="background:#0a0f1e;border-color:#1e293b">'
+      +'<div class="sectitle">📋 Resumen mensual</div>'
+      + months.slice().reverse().map(function(m){
+          var diff = (m.ingresos||0)-(m.gastos||0);
+          var diffColor = diff>=0?'#22c55e':'#ef4444';
+          var tag = diff>=0
+            ? '<span style="background:#14532d;color:#4ade80;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700">+'+fmt(diff)+'</span>'
+            : '<span style="background:#450a0a;color:#fca5a5;border-radius:6px;padding:2px 7px;font-size:10px;font-weight:700">'+fmt(diff)+'</span>';
+          return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b11">'
+            +'<div style="color:#f8fafc;font-size:13px;font-weight:600;width:36px">'+m.mes+'</div>'
+            +'<div style="display:flex;flex-direction:column;align-items:flex-end;gap:2px;flex:1">'
+            +'<div style="display:flex;gap:12px;font-size:11px;font-family:monospace">'
+            +'<span style="color:#22c55e">▲ '+(m.ingresos>0?fmt(m.ingresos):'—')+'</span>'
+            +'<span style="color:#ef4444">▼ '+fmt(m.gastos)+'</span>'
+            +'</div>'
+            +'<div>'+tag+'</div>'
+            +'</div></div>';
+        }).join('')
+      +'</div>'
+    : '';
+
+  return barsHtml + catHtml + detalleHtml;
 }
 
 // ─── LOGROS ───────────────────────────────────────────────────────────────────
