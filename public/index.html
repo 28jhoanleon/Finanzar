@@ -190,9 +190,11 @@ function defaultDB() {
     onboardingDone:false, xp:0, racha:0, logros:[], aiHistory:[], darkMode:true, catsExtra:{},
     dolarCache:null, dolarTs:0,
     billeteras:[
-      {id:1,nombre:'Efectivo',icon:'💵',color:'#22c55e',saldo:0},
-      {id:2,nombre:'Banco',icon:'🏦',color:'#3b82f6',saldo:0},
-      {id:3,nombre:'Mercado Pago',icon:'💙',color:'#009ee3',saldo:0}
+      {id:1,nombre:'Efectivo',icon:'💵',color:'#22c55e',saldo:0,orden:0},
+      {id:2,nombre:'Banco',icon:'🏦',color:'#3b82f6',saldo:0,orden:1},
+      {id:3,nombre:'Mercado Pago',icon:'🔵',color:'#009ee3',saldo:0,orden:2},
+      {id:4,nombre:'Fiwind',icon:'🟡',color:'#eab308',saldo:0,orden:3},
+      {id:5,nombre:'Ripio',icon:'🟣',color:'#7c3aed',saldo:0,orden:4}
     ],
     metas:[],
     historialMensual:[
@@ -255,7 +257,15 @@ function getLevel() {
 }
 
 // ─── HELPERS ──────────────────────────────────────────────────────────────────
-function fmt(n) { return new Intl.NumberFormat('es-AR',{style:'currency',currency:'ARS',maximumFractionDigits:0}).format(n); }
+function fmt(n) {
+  if(isNaN(n)||n===null||n===undefined) return '$0';
+  return '$\u202f'+Math.round(n).toLocaleString('es-AR');
+}
+function fmtShort(n) {
+  if(n>=1000000) return '$'+Math.round(n/1000000*10)/10+'M';
+  if(n>=1000) return '$'+Math.round(n/1000)+'k';
+  return fmt(n);
+}
 function pct(a,b) { return Math.min(100,Math.round((a/b)*100)); }
 function genId() { return Date.now()+Math.floor(Math.random()*1000); }
 function pb(val,max,color,h) {
@@ -300,21 +310,33 @@ var calcCuotasMonto2=200000, calcCuotasN2=12, calcCuotasTNA2=0;
 
 // ─── ONBOARDING ───────────────────────────────────────────────────────────────
 function renderOnboarding() {
-  var icons=['👋','👛','🎯'], titles=['¡Bienvenido a FinanzasAR!','Tus billeteras','¿Primera meta?'];
-  var subs=['Tu central de control. 3 pasos y listo.','¿Cuánto tenés en cada una ahora mismo?','Algo concreto para ahorrar. Podés saltearlo.'];
+  var icons=['👋','👛','🎯'];
+  var titles=['¡Bienvenido a FinanzasAR!','¿Cuánto tenés ahora mismo?','¿Primera meta?'];
+  var subs=[
+    'Tu central de control. 3 pasos y listo.',
+    'No importa lo que pasó antes. Solo poné lo que tenés hoy y empezás a registrar desde acá.',
+    'Algo concreto para ahorrar. Podés saltearlo.'
+  ];
   var content='';
   if(obStep===0){
     content='<div class="card" style="background:#1e293b;border:none">'
-      +'<div class="fg"><label class="flbl">💰 Ingreso mensual ($)</label>'
+      +'<div class="fg"><label class="flbl">💰 Tu sueldo o ingreso mensual ($)</label>'
       +'<input type="number" id="ob0a" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
-      +'<div style="color:#475569;font-size:11px;margin-top:5px">Tu sueldo o lo que entra por mes. Solo para referencia.</div></div>'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">Solo para referencia y cálculos. No se registra como transacción.</div></div>'
       +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($)</label>'
       +'<input type="number" id="ob0b" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
-      +'<div style="color:#475569;font-size:11px;margin-top:5px">El tope que te ponés para gastar. El semáforo 🟢🟡🔴 se basa en esto.</div></div>'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">El semáforo 🟢🟡🔴 se basa en este número. Podés cambiarlo después.</div></div>'
       +'</div>';
   } else if(obStep===1){
     content='<div class="card" style="background:#1e293b;border:none">'
-      +(DB.billeteras||[]).map(function(b){return '<div class="fg"><label class="flbl">'+b.icon+' '+b.nombre+' ($)</label><input type="number" id="ob1_'+b.id+'" value="'+b.saldo+'" inputmode="numeric"></div>';}).join('')
+      +'<div style="background:#0c1a10;border-radius:10px;padding:10px 12px;margin-bottom:14px;border:1px solid #22c55e33">'
+      +'<div style="color:#86efac;font-size:12px;font-weight:700;margin-bottom:2px">💡 Cómo funciona</div>'
+      +'<div style="color:#64748b;font-size:12px">Poné exactamente cuánto tenés en cada billetera <strong style="color:#94a3b8">hoy</strong>. No hace falta recordar qué gastaste antes — eso ya pasó. De acá en adelante registrás todo.</div>'
+      +'</div>'
+      +(DB.billeteras||[]).map(function(b){
+        return '<div class="fg"><label class="flbl">'+b.icon+' '+b.nombre+' — saldo actual ($)</label>'
+          +'<input type="number" id="ob1_'+b.id+'" value="'+b.saldo+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace" placeholder="0"></div>';
+      }).join('')
       +'</div>';
   } else {
     content='<div class="card" style="background:#1e293b;border:none">'
@@ -699,14 +721,23 @@ function renderIA() {
 }
 
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
+var billSort = 'custom'; // 'alpha' | 'saldo' | 'custom'
 function renderConfig() {
-  var billsHtml=(DB.billeteras||[]).map(function(b){
-    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b">'
-      +'<div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">'+b.icon+'</span>'
+  var bills = (DB.billeteras||[]).slice();
+  if(billSort==='alpha') bills.sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
+  else if(billSort==='saldo') bills.sort(function(a,b){return b.saldo-a.saldo;});
+  var billsHtml = bills.map(function(b,i){
+    return '<div id="bill_'+b.id+'" draggable="true" ondragstart="billDragStart(event,'+b.id+')" ondragover="billDragOver(event,'+b.id+')" ondrop="billDrop(event,'+b.id+')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b;cursor:grab">'
+      +'<div style="display:flex;align-items:center;gap:10px">'
+      +'<span style="color:#334155;font-size:16px;cursor:grab" title="Arrastrar para reordenar">⠿</span>'
+      +'<span style="font-size:22px">'+b.icon+'</span>'
       +'<div><div style="color:#f8fafc;font-size:14px;font-weight:600">'+b.nombre+'</div>'
       +'<div style="color:'+b.color+';font-size:13px;font-family:monospace;font-weight:700">'+fmt(b.saldo)+'</div></div></div>'
       +'<button class="bsm" onclick="editBilletera('+b.id+')">Editar</button></div>';
   }).join('');
+
+  var sortBtnStyle = function(s){ return 'background:'+(billSort===s?'#3b82f6':'#1e293b')+';color:'+(billSort===s?'#fff':'#64748b')+';border:none;border-radius:8px;padding:5px 10px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit'; };
+
   var metasHtml=DB.metas.length===0
     ?'<div style="color:#475569;font-size:13px;text-align:center;padding:12px">No tenés metas todavía.</div>'
     :DB.metas.map(function(m){
@@ -730,7 +761,15 @@ function renderConfig() {
       +'<input type="number" id="presup_'+cat+'" value="'+PRESUP[cat]+'" inputmode="numeric"></div>';
   }).join('');
 
-  return '<div class="card"><div class="sectitle">👛 Mis billeteras</div>'+billsHtml
+  return '<div class="card"><div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">'
+    +'<div class="sectitle" style="margin:0">👛 Mis billeteras</div>'
+    +'<div style="display:flex;gap:6px">'
+    +'<button onclick="billSort=\'alpha\';render()" style="'+sortBtnStyle('alpha')+'">A-Z</button>'
+    +'<button onclick="billSort=\'saldo\';render()" style="'+sortBtnStyle('saldo')+'">💰</button>'
+    +'<button onclick="billSort=\'custom\';render()" style="'+sortBtnStyle('custom')+'">⠿</button>'
+    +'</div></div>'
+    +'<div style="color:#475569;font-size:11px;margin-bottom:10px">⠿ = orden manual arrastrando · A-Z = alfabético · 💰 = por saldo</div>'
+    +billsHtml
     +'<button class="btn gho" style="margin-top:12px" onclick="openModal(\'billetera\')">+ Nueva billetera</button></div>'
     +'<div class="card"><div class="sectitle">👤 Tus datos</div>'
     +'<div class="fg"><label class="flbl">Ingreso mensual ($)</label><input type="number" id="cfgIng" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
@@ -814,6 +853,21 @@ function borrarCat(key) {
   saveDB(); toast('✅ Categoría borrada'); render();
 }
 
+var billDragId = null;
+function billDragStart(e, id) { billDragId=id; e.dataTransfer.effectAllowed='move'; }
+function billDragOver(e, id) { e.preventDefault(); e.dataTransfer.dropEffect='move'; }
+function billDrop(e, id) {
+  e.preventDefault();
+  if(billDragId===null||billDragId===id) return;
+  var bills=DB.billeteras;
+  var fromIdx=bills.findIndex(function(b){return b.id===billDragId;});
+  var toIdx=bills.findIndex(function(b){return b.id===id;});
+  if(fromIdx<0||toIdx<0) return;
+  var item=bills.splice(fromIdx,1)[0];
+  bills.splice(toIdx,0,item);
+  billSort='custom';
+  saveDB(); render();
+}
 function editBilletera(id) { var b=(DB.billeteras||[]).find(function(x){return x.id===id;}); if(b)openModal('editBilletera',b); }
 function guardarBilletera(id) {
   var el=document.getElementById('editBillSaldo'); if(!el)return;
