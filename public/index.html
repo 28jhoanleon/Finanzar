@@ -266,6 +266,71 @@ function fmtShort(n) {
   if(n>=1000) return '$'+Math.round(n/1000)+'k';
   return fmt(n);
 }
+// Formatea un input numérico con puntos de miles mientras se tipea
+function setupNumInput(el) {
+  if(!el||el._fmtReady) return;
+  el._fmtReady = true;
+  function update() {
+    var raw = el.value.replace(/\./g,'').replace(/[^0-9]/g,'');
+    el._rawVal = raw ? parseInt(raw) : '';
+    if(raw.length > 1) {
+      var pos = el.selectionStart, oldLen = el.value.length;
+      el.value = parseInt(raw).toLocaleString('es-AR');
+      // keep cursor roughly in place
+      var diff = el.value.length - oldLen;
+      try{ el.setSelectionRange(pos+diff, pos+diff); } catch(e){}
+    }
+  }
+  el.addEventListener('input', update);
+  el.addEventListener('focus', function(){ if(!el.value) el.value=''; });
+}
+function getNumVal(id) {
+  var el = document.getElementById(id); if(!el) return 0;
+  var raw = (el._rawVal !== undefined) ? el._rawVal : el.value.replace(/\./g,'').replace(/,/g,'').replace(/[^0-9]/g,'');
+  return parseFloat(raw)||0;
+}
+function setupNumInputs() {
+  document.querySelectorAll('input[data-num]').forEach(function(el){ setupNumInput(el); });
+}
+// Inputs numéricos con formato visual
+function attachFmtInput(el) {
+  if(!el || el._fmtAttached) return;
+  el._fmtAttached = true;
+  el.type = 'text';
+  el.inputMode = 'numeric';
+  el.autocomplete = 'off';
+  function refresh() {
+    var raw = el.value.replace(/[^0-9]/g,'');
+    el._raw = raw ? parseInt(raw) : 0;
+    var pos = el.selectionStart;
+    var formatted = raw ? parseInt(raw).toLocaleString('es-AR') : '';
+    el.value = formatted;
+  }
+  el.addEventListener('input', function(e) {
+    var raw = el.value.replace(/[^0-9]/g,'');
+    el._raw = raw ? parseInt(raw) : 0;
+    el.value = raw ? parseInt(raw).toLocaleString('es-AR') : '';
+  });
+  el.addEventListener('focus', function() {
+    if(!el.value || el.value==='0') el.value='';
+  });
+  el.addEventListener('blur', function() {
+    if(!el._raw) el.value='';
+  });
+  // Init with existing value
+  var init = parseFloat(el.value)||0;
+  el._raw = init;
+  el.value = init ? init.toLocaleString('es-AR') : '';
+}
+function getVal(id) {
+  var el = document.getElementById(id);
+  if(!el) return 0;
+  if(el._raw !== undefined) return el._raw;
+  return parseFloat(el.value.replace(/[^0-9.,]/g,'').replace(',','.'))||0;
+}
+function attachAllFmt() {
+  document.querySelectorAll('input[data-fmt]').forEach(attachFmtInput);
+}
 function pct(a,b) { return Math.min(100,Math.round((a/b)*100)); }
 function genId() { return Date.now()+Math.floor(Math.random()*1000); }
 function pb(val,max,color,h) {
@@ -323,9 +388,9 @@ function renderOnboarding() {
       +'<div class="fg"><label class="flbl">💰 Tu sueldo o ingreso mensual ($)</label>'
       +'<input type="number" id="ob0a" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
       +'<div style="color:#475569;font-size:11px;margin-top:5px">Solo para referencia y cálculos. No se registra como transacción.</div></div>'
-      +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($)</label>'
-      +'<input type="number" id="ob0b" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
-      +'<div style="color:#475569;font-size:11px;margin-top:5px">El semáforo 🟢🟡🔴 se basa en este número. Podés cambiarlo después.</div></div>'
+      +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($) <span style="color:#475569;font-weight:400;font-size:10px">opcional</span></label>'
+      +'<input type="number" id="ob0b" value="" placeholder="Dejalo vacío si no sabés" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">Si lo completás, el semáforo 🟢🟡🔴 lo usa. Si no, mostramos el saldo real sin juzgar.</div></div>'
       +'</div>';
   } else if(obStep===1){
     content='<div class="card" style="background:#1e293b;border:none">'
@@ -357,37 +422,46 @@ function renderOnboarding() {
     +(obStep<2?'<button class="btn gho" style="margin-top:8px;font-size:12px" onclick="obSkip()">Saltar configuración</button>':'')
     +'</div>';
 }
+function rawNum(id) {
+  var el=document.getElementById(id); if(!el) return 0;
+  return parseFloat((el.value||'').replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.]/g,''))||0;
+}
 function obNext() {
   if(obStep===0){
-    var a=parseFloat(document.getElementById('ob0a').value), b=parseFloat(document.getElementById('ob0b').value);
-    if(!a||!b){toast('⚠️ Completá los dos campos');return;}
+    var a=rawNum('ob0a'), b=rawNum('ob0b');
+    if(!a){toast('⚠️ Ingresá tu sueldo mensual');return;}
     DB.ingresos=a; DB.presupuesto=b;
   } else if(obStep===1){
-    (DB.billeteras||[]).forEach(function(b){var el=document.getElementById('ob1_'+b.id);if(el)b.saldo=parseFloat(el.value)||0;});
+    (DB.billeteras||[]).forEach(function(b){var el=document.getElementById('ob1_'+b.id);if(el)b.saldo=rawNum('ob1_'+b.id);});
   } else {
-    var nom=document.getElementById('ob2a').value.trim(), obj=parseFloat(document.getElementById('ob2b').value);
+    var nom=document.getElementById('ob2a').value.trim(), obj=rawNum('ob2b');
     if(nom&&obj>0) DB.metas=[{id:genId(),nombre:nom,icon:'🎯',objetivo:obj,ahorrado:0,color:'#3b82f6'}];
     DB.transacciones=[]; DB.onboardingDone=true; saveDB(); addXP(100,'¡Configuración lista!'); setTab('panel'); return;
   }
   saveDB(); obStep++; render();
+  setTimeout(function(){ document.querySelectorAll('.content input[inputmode="numeric"]').forEach(setupNumInput); },80);
 }
-function obBack() { obStep--; render(); }
+function obBack() { obStep--; render(); setTimeout(function(){ document.querySelectorAll('.content input[inputmode="numeric"]').forEach(setupNumInput); },80); }
 function obSkip() { DB.onboardingDone=true; saveDB(); render(); }
 
 // ─── PANEL ────────────────────────────────────────────────────────────────────
 function renderPanel() {
   if(!DB.onboardingDone) return renderOnboarding();
-  var saldo=getSaldo(), gastos=getGastosMes(), gp=pct(gastos,DB.presupuesto);
-  var sem=semaforo(gp), restante=DB.presupuesto-gastos, gc=getGastosCat();
+  var saldo=getSaldo(), gastos=getGastosMes(), gc=getGastosCat();
+  var tieneLimite=DB.presupuesto>0;
+  var limiteRef=tieneLimite?DB.presupuesto:DB.ingresos;
+  var gp=tieneLimite?pct(gastos,limiteRef):pct(gastos,DB.ingresos);
+  var sem=semaforo(tieneLimite?gp:Math.min(gp,89)); // sin límite nunca rojo
+  var restante=saldo-gastos; // basado en saldo real
   var lvl=getLevel(), dolar=getDolar();
   var diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
   var diaHoy=new Date().getDate(), diasRest=diasMes-diaHoy;
   var ritmoXDia=diaHoy>0?gastos/diaHoy:0;
   var proyectado=Math.round(ritmoXDia*diasMes);
-  var llegas=proyectado<=DB.presupuesto;
+  var llegas=tieneLimite?proyectado<=limiteRef:true;
   var gastoXDia=Math.round(ritmoXDia);
-  var gastoXDiaIdeal=diaHoy>0?Math.round(DB.presupuesto/diasMes):0;
-  var barColor=gp>90?'#ef4444':gp>70?'#f59e0b':'#22c55e';
+  var gastoXDiaIdeal=tieneLimite&&diaHoy>0?Math.round(limiteRef/diasMes):0;
+  var barColor=tieneLimite?(gp>90?'#ef4444':gp>70?'#f59e0b':'#22c55e'):'#22c55e';
   var alerts=[];
   Object.keys(gc).forEach(function(cat){var g=gc[cat],p2=PRESUP[cat];if(p2&&g>p2)alerts.push({icon:(CATS[cat]||{}).icon||'⚠️',txt:'Superaste '+((CATS[cat]||{label:cat}).label)+' por '+fmt(g-p2),color:'#ef4444'});});
   if(alerts.length===0) alerts.push({icon:'✅',txt:'Todo bajo control este mes. Seguí así.',color:'#22c55e'});
@@ -442,14 +516,13 @@ function renderPanel() {
     +'<div style="background:#1e293b;border-radius:14px;padding:14px 16px;min-width:100px;border:1px dashed #334155;flex-shrink:0;display:flex;align-items:center;justify-content:center;cursor:pointer" onclick="openModal(\'billetera\')">'
     +'<div style="text-align:center;color:#475569"><div style="font-size:22px">➕</div><div style="font-size:12px;margin-top:4px">Nueva</div></div></div></div></div>'
     +'<div class="g2"><div class="card"><div class="lbl">Gastos del mes</div>'
-    +'<div class="mednum" id="gastosAnim" style="margin:6px 0 10px">'+fmt(0)+'</div>'+pb(gastos,DB.presupuesto,barColor)
-    +'<div style="color:#64748b;font-size:12px;margin-top:6px">'+gp+'% del presupuesto</div></div>'
+    +'<div class="mednum" id="gastosAnim" style="margin:6px 0 10px">'+fmt(0)+'</div>'
+    +(tienePres?pb(gastos,DB.presupuesto,barColor)+'<div style="color:#64748b;font-size:12px;margin-top:6px">'+gp+'% del límite</div>':'<div style="color:#64748b;font-size:12px;margin-top:6px">Sin límite configurado</div>')+'</div>'
     +'<div class="card"><div class="lbl">Queda este mes</div>'
     +'<div class="mednum" style="margin:6px 0 6px;color:'+(restante>0?'#22c55e':'#ef4444')+'">'+fmt(Math.abs(restante))+'</div>'
-    +'<div style="color:#64748b;font-size:12px;margin-bottom:2px">'+diasRest+' días restantes</div>'
-    +'<div style="color:#475569;font-size:11px;margin-bottom:8px">Gastás '+fmt(gastoXDia)+'/día · ideal '+fmt(gastoXDiaIdeal)+'/día</div>'
-    +'<span class="badge '+(llegas?'bg':'br')+'">'+(llegas?'✅ Llegás':'❌ No llegás')+'</span>'
-    +'<div style="color:#475569;font-size:11px;margin-top:6px">A este ritmo: '+fmt(proyectado)+' al fin del mes</div>'
+    +'<div style="color:#64748b;font-size:12px;margin-bottom:2px">'+diasRest+' días restantes · '+fmt(gastoXDia)+'/día</div>'
+    +(tieneLimite?'<div style="color:#475569;font-size:11px;margin-bottom:8px">Ideal: '+fmt(gastoXDiaIdeal)+'/día para no pasarte</div>':'<div style="color:#475569;font-size:11px;margin-bottom:8px">Sin límite configurado — saldo real</div>')
+    +(tieneLimite?'<span class="badge '+(llegas?'bg':'br')+'">'+(llegas?'✅ Llegás':'❌ No llegás')+'</span><div style="color:#475569;font-size:11px;margin-top:6px">A este ritmo: '+fmt(proyectado)+' al fin del mes</div>':'')
     +'</div></div>'
     +'<div class="card" style="padding:14px 18px"><div style="color:#f59e0b;font-size:13px;font-weight:700;margin-bottom:10px">🔥 Alertas</div>'
     +alerts.map(function(a){return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px"><span>'+a.icon+'</span><span style="color:'+a.color+'">'+a.txt+'</span></div>';}).join('')+'</div>'
@@ -877,7 +950,7 @@ function guardarBilletera(id) {
 }
 function agregarBilletera() {
   var nom=document.getElementById('billNombre').value.trim(), icon=document.getElementById('billIcon').value.trim()||'💳';
-  var saldo=parseFloat(document.getElementById('billSaldo').value)||0;
+  var saldo=rawNum('billSaldo');
   if(!nom){toast('⚠️ Ingresá un nombre');return;}
   var cols=['#3b82f6','#a855f7','#f97316','#22c55e','#ef4444','#fbbf24','#009ee3'];
   if(!DB.billeteras)DB.billeteras=[];
@@ -891,14 +964,14 @@ function deleteBilletera(id) {
 }
 function agregarMeta() {
   var nom=document.getElementById('metaNombre').value.trim(), icon=document.getElementById('metaIcon').value.trim()||'🎯';
-  var obj=parseFloat(document.getElementById('metaObj').value), ah=parseFloat(document.getElementById('metaAh').value)||0;
+  var obj=rawNum('metaObj'), ah=rawNum('metaAh');
   if(!nom||!obj){toast('⚠️ Completá nombre y objetivo');return;}
   var cols=['#3b82f6','#a855f7','#f97316','#22c55e','#ef4444','#fbbf24'];
   DB.metas.push({id:genId(),nombre:nom,icon:icon,objetivo:obj,ahorrado:ah,color:cols[DB.metas.length%cols.length]});
   saveDB(); addXP(50,'Nueva meta'); closeModal(); setTab('metas');
 }
 function agregarAMeta(id) {
-  var monto=parseFloat(document.getElementById('addMetaMonto').value);
+  var monto=rawNum('addMetaMonto');
   if(!monto||monto<=0){toast('⚠️ Ingresá un monto válido');return;}
   var meta=DB.metas.find(function(m){return m.id===id;});
   if(!meta)return;
@@ -908,7 +981,7 @@ function agregarAMeta(id) {
 }
 function deleteMeta(id) { if(!confirm('¿Eliminar esta meta?'))return; DB.metas=DB.metas.filter(function(m){return m.id!==id;}); saveDB(); render(); }
 function agregarTx() {
-  var monto=parseFloat(document.getElementById('txMonto').value), desc=document.getElementById('txDesc').value.trim();
+  var monto=rawNum('txMonto'), desc=document.getElementById('txDesc').value.trim();
   var cat=document.getElementById('txCat').value, tipo=document.getElementById('txTipo').value;
   if(!monto||monto<=0){toast('⚠️ Ingresá un monto válido');return;}
   if(!desc){toast('⚠️ Escribí una descripción');return;}
@@ -1030,7 +1103,7 @@ function openModal(type,data) {
       +(dd?'<div style="color:#64748b;font-size:12px;margin-bottom:12px">Restante actual: <strong style="color:#f8fafc">'+fmt(dd.montoTotal-(dd.montoPagado||0))+'</strong></div>':'')
       +'<button class="btn pri" onclick="pagarDeudaLibre('+did+')">Registrar pago</button>';
   }
-  document.getElementById('mc').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+html+'</div></div>';
+  showModal(html);
 }
 function toggleDeudaTipo() {
   var tipo=document.getElementById('dTipo').value;
@@ -1038,6 +1111,10 @@ function toggleDeudaTipo() {
   document.getElementById('dMontoSection').style.display=tipo==='libre'?'':'none';
 }
 function closeModal() { document.getElementById('mc').innerHTML=''; }
+function showModal(html) {
+  document.getElementById('mc').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+html+'</div></div>';
+  setTimeout(function(){ document.querySelectorAll('#mc input[inputmode=numeric]').forEach(function(el){ if(!el._fmtAttached) attachFmtInput(el); }); },40);
+}
 function openNuevaCatModal() {
   var html='<div class="mtitle"><span>🏷️ Nueva categoría</span><button class="mclose" onclick="closeModal()">✕</button></div>'
     +'<div class="fg"><label class="flbl">Nombre</label><input type="text" id="catNombre" placeholder="Ej: Mascota, Gym, Farmacia..."></div>'
@@ -1049,7 +1126,7 @@ function openNuevaCatModal() {
     }).join('')+'</div>'
     +'<input type="hidden" id="catColor" value="#22c55e"></div>'
     +'<button class="btn pri" onclick="agregarCat()">Crear categoría</button>';
-  document.getElementById('mc').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+html+'</div></div>';
+  showModal(html);
 }
 function openFavModal() {
   var catOpts=Object.keys(CATS).map(function(k){return '<option value="'+k+'">'+CATS[k].icon+' '+CATS[k].label+'</option>';}).join('');
@@ -1060,7 +1137,7 @@ function openFavModal() {
     +'<div class="fg"><label class="flbl">Categoría</label><select id="favCat">'+catOpts+'</select></div>'
     +'<div class="fg"><label class="flbl">Tipo</label><select id="favTipo"><option value="gasto">💸 Gasto</option><option value="ingreso">💰 Ingreso</option></select></div>'
     +'<button class="btn pri" onclick="agregarFav()">Guardar favorito ⭐</button>';
-  document.getElementById('mc').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+html+'</div></div>';
+  showModal(html);
 }
 
 // ─── RENDER ───────────────────────────────────────────────────────────────────
@@ -1096,6 +1173,12 @@ function render() {
   animBars();
   if(currentTab==='panel'){countUp('saldoAnim',getSaldo());countUp('gastosAnim',getGastosMes());}
   window.scrollTo({top:0,behavior:'smooth'});
+  // Attach formatted inputs
+  setTimeout(function(){
+    document.querySelectorAll('input[type=number], input[inputmode=numeric]').forEach(function(el){
+      if(!el._fmtAttached && el.id !== 'txFecha') attachFmtInput(el);
+    });
+  }, 50);
 }
 
 function setTab(tab,btn,navId) {
@@ -1733,7 +1816,7 @@ function deleteFav(id) {
 
 function agregarFav() {
   var desc  = document.getElementById('favDesc').value.trim();
-  var monto = parseFloat(document.getElementById('favMonto').value);
+  var monto = rawNum('favMonto');
   var cat   = document.getElementById('favCat').value;
   var icon  = document.getElementById('favIcon').value.trim() || (CATS[cat]||{icon:'⭐'}).icon;
   var tipo  = document.getElementById('favTipo').value;
