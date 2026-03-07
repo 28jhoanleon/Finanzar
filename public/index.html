@@ -483,7 +483,7 @@ function renderPanel() {
   var alerts=[];
   Object.keys(gc).forEach(function(cat){var g=gc[cat],p2=PRESUP[cat];if(p2&&g>p2)alerts.push({icon:(CATS[cat]||{}).icon||'⚠️',txt:'Superaste '+((CATS[cat]||{label:cat}).label)+' por '+fmt(g-p2),color:'#ef4444'});});
   if(alerts.length===0) alerts.push({icon:'✅',txt:'Todo bajo control este mes. Seguí así.',color:'#22c55e'});
-  var bills=(DB.billeteras||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0);}).map(function(b){
+  var bills=(DB.billeteras||[]).map(function(b){
     return '<div style="background:#1e293b;border-radius:14px;padding:14px 16px;min-width:120px;border:1px solid '+b.color+'33;flex-shrink:0">'
       +'<div style="font-size:22px">'+b.icon+'</div><div style="color:#f8fafc;font-weight:700;font-size:13px;margin-top:6px">'+b.nombre+'</div>'
       +'<div style="color:'+b.color+';font-weight:800;font-size:14px;font-family:monospace;margin-top:4px">'+fmt(b.saldo)+'</div></div>';
@@ -491,9 +491,11 @@ function renderPanel() {
   var movs=DB.transacciones.length===0
     ?'<div style="color:#475569;text-align:center;padding:16px;font-size:13px">No hay movimientos aún.<br>Tocá <strong>+ Agregar</strong> para empezar.</div>'
     :DB.transacciones.slice(0,5).map(function(t){var c=CATS[t.cat]||CATS.otro;
+      var bMov=(t.billetera&&(DB.billeteras||[]).find(function(b){return b.id===t.billetera;}))||null;
       return '<div class="row"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">'+c.icon+'</span>'
-        +'<div><div style="color:#e2e8f0;font-size:13px">'+t.desc+'</div><div style="color:#475569;font-size:11px">'+t.fecha+'</div></div></div>'
-        +'<div style="text-align:right"><div style="color:'+(t.tipo==='gasto'?'#ef4444':'#22c55e')+';font-weight:700;font-size:13px;font-family:monospace">'+(t.tipo==='gasto'?'-':'+')+fmt(t.monto)+'</div>'+(t.moneda==='USD'?'<div style="color:#64748b;font-size:10px">USD '+t.montoOrig+'</div>':'')+'</div></div>';
+        +'<div><div style="color:#e2e8f0;font-size:13px">'+t.desc+'</div>'
+        +'<div style="color:#475569;font-size:11px">'+t.fecha+(bMov?' · <span style="color:'+bMov.color+';font-weight:600">'+bMov.icon+' '+bMov.nombre+'</span>':'')+'</div></div></div>'
+        +'<div style="text-align:right"><div style="color:'+(t.tipo=='gasto'?'#ef4444':'#22c55e')+';font-weight:700;font-size:13px;font-family:monospace">'+(t.tipo=='gasto'?'-':'+')+fmt(t.monto)+'</div>'+(t.moneda=='USD'?'<div style="color:#64748b;font-size:10px">USD '+t.montoOrig+'</div>':'')+'</div></div>';
     }).join('');
   var catRows=Object.keys(PRESUP).map(function(cat){var g=gc[cat]||0,c=CATS[cat];
     return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">'
@@ -1006,7 +1008,7 @@ function renderIA() {
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 var billSort = 'custom'; // 'alpha' | 'saldo' | 'custom'
 function renderConfig() {
-  var bills = (DB.billeteras||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0);});
+  var bills = (DB.billeteras||[]).slice();
   if(billSort==='alpha') bills.sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
   else if(billSort==='saldo') bills.sort(function(a,b){return b.saldo-a.saldo;});
   var billsHtml = bills.map(function(b,i){
@@ -1301,7 +1303,8 @@ function saveApiKey() {
 // ─── MODALS ───────────────────────────────────────────────────────────────────
 function openModal(type,data) {
   var html='', catOpts=Object.keys(CATS).map(function(k){return '<option value="'+k+'">'+CATS[k].icon+' '+CATS[k].label+'</option>';}).join('');
-  var billOpts=(DB.billeteras||[]).map(function(b){return '<option value="'+b.id+'">'+b.icon+' '+b.nombre+'</option>';}).join('');
+  var favBill=(DB.billeteras||[]).slice().sort(function(a,b){return b.saldo-a.saldo;})[0]||{};
+  var billOpts=(DB.billeteras||[]).map(function(b){return '<option value="'+b.id+'"'+(b.id===favBill.id?' selected':'')+'>'+b.icon+' '+b.nombre+'</option>';}).join('');
   if(type==='add'){
     html='<div class="mtitle"><span>Agregar movimiento</span><button class="mclose" onclick="closeModal()">✕</button></div>'
       +'<div style="display:flex;gap:8px;margin-bottom:18px">'
