@@ -197,7 +197,7 @@ function saveDB() { localStorage.setItem(SKEY, JSON.stringify(DB)); }
 function daysAgo(n) { var d = new Date(); d.setDate(d.getDate()-n); return d.toISOString().split('T')[0]; }
 function defaultDB() {
   return {
-    apiKey:'', ingresos:850000, presupuesto:700000,
+    apiKey:'', ingresos:0, presupuesto:0,
     onboardingDone:false, xp:0, racha:0, logros:[], aiHistory:[], darkMode:true, catsExtra:{},
     dolarCache:null, dolarTs:0,
     billeteras:[
@@ -413,7 +413,7 @@ function renderOnboarding() {
   if(obStep===0){
     content='<div class="card" style="background:#1e293b;border:none">'
       +'<div class="fg"><label class="flbl">💰 Tu sueldo o ingreso mensual ($)</label>'
-      +'<input type="number" id="ob0a" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<input type="number" id="ob0a" value="'+(DB.ingresos||'')+'" placeholder="Ej: 800.000" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
       +'<div style="color:#475569;font-size:11px;margin-top:5px">Solo para referencia y cálculos. No se registra como transacción.</div></div>'
       +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($) <span style="color:#475569;font-weight:400;font-size:10px">opcional</span></label>'
       +'<input type="number" id="ob0b" value="" placeholder="Dejalo vacío si no sabés" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
@@ -499,12 +499,17 @@ function renderPanel() {
   }).join('');
   var movs=DB.transacciones.length===0
     ?'<div style="color:#475569;text-align:center;padding:16px;font-size:13px">No hay movimientos aún.<br>Tocá <strong>+ Agregar</strong> para empezar.</div>'
-    :DB.transacciones.slice(0,5).map(function(t){var c=CATS[t.cat]||CATS.otro;
+    :DB.transacciones.slice(0,5).map(function(t){
+      var c=CATS[t.cat]||CATS.otro;
       var bMov=(t.billetera&&(DB.billeteras||[]).find(function(b){return b.id===t.billetera;}))||null;
-      return '<div class="row"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">'+c.icon+'</span>'
+      var isTrf=t.tipo==='transferencia';
+      var montoColor=isTrf?'#f59e0b':t.tipo==='gasto'?'#ef4444':'#22c55e';
+      var montoPrefix=isTrf?'':t.tipo==='gasto'?'-':'+';
+      var rowIcon=isTrf?'🔄':c.icon;
+      return '<div class="row"><div style="display:flex;gap:10px;align-items:center"><span style="font-size:20px">'+rowIcon+'</span>'
         +'<div><div style="color:#e2e8f0;font-size:13px">'+t.desc+'</div>'
-        +'<div style="color:#475569;font-size:11px">'+t.fecha+(bMov?' · <span style="color:'+bMov.color+';font-weight:600">'+bMov.icon+' '+bMov.nombre+'</span>':'')+'</div></div></div>'
-        +'<div style="text-align:right"><div style="color:'+(t.tipo=='gasto'?'#ef4444':'#22c55e')+';font-weight:700;font-size:13px;font-family:monospace">'+(t.tipo=='gasto'?'-':'+')+fmt(t.monto)+'</div>'+(t.moneda=='USD'?'<div style="color:#64748b;font-size:10px">USD '+t.montoOrig+'</div>':'')+'</div></div>';
+        +'<div style="color:#475569;font-size:11px">'+t.fecha+(bMov&&!isTrf?' · <span style="color:'+bMov.color+';font-weight:600">'+bMov.icon+' '+bMov.nombre+'</span>':'')+'</div></div></div>'
+        +'<div style="text-align:right"><div style="color:'+montoColor+';font-weight:700;font-size:13px;font-family:monospace">'+montoPrefix+fmt(t.monto)+'</div>'+(t.moneda==='USD'?'<div style="color:#64748b;font-size:10px">USD '+t.montoOrig+'</div>':'')+'</div></div>';
     }).join('');
   var catRows=Object.keys(PRESUP).map(function(cat){var g=gc[cat]||0,c=CATS[cat];
     return '<div style="margin-bottom:12px"><div style="display:flex;justify-content:space-between;margin-bottom:5px;font-size:13px">'
@@ -1280,6 +1285,14 @@ function hacerTransferencia() {
   if(!origen||!destino) return;
   if(origen.saldo < monto){toast('⚠️ Saldo insuficiente en '+origen.nombre);return;}
   origen.saldo -= monto; destino.saldo += monto;
+  // Registrar en historial de movimientos
+  DB.transacciones.unshift({
+    id:genId(), tipo:'transferencia', monto:monto, montoOrig:monto, moneda:'ARS',
+    cat:'otro', desc:'🔄 '+origen.nombre+' → '+destino.nombre,
+    billetera:origenId, billeteraDestino:destinoId,
+    fecha:new Date().toISOString().slice(0,10)
+  });
+  actualizarHistorialMensual();
   saveDB(); closeModal();
   toast('🔄 '+fmt(monto)+' de '+origen.nombre+' → '+destino.nombre);
   render();
@@ -1450,11 +1463,14 @@ function openNuevaCatModal() {
 }
 function openFavModal() {
   var catOpts=Object.keys(CATS).map(function(k){return '<option value="'+k+'">'+CATS[k].icon+' '+CATS[k].label+'</option>';}).join('');
+  var favBillDef=(DB.billeteras||[]).slice().sort(function(a,b){return b.saldo-a.saldo;})[0]||{};
+  var billOptsFav=(DB.billeteras||[]).map(function(b){return '<option value="'+b.id+'"'+(b.id===favBillDef.id?' selected':'')+'>'+b.icon+' '+b.nombre+'</option>';}).join('');
   var html='<div class="mtitle"><span>⭐ Nuevo favorito</span><button class="mclose" onclick="closeModal()">✕</button></div>'
     +'<div class="fg"><label class="flbl">Descripción</label><input type="text" id="favDesc" placeholder="Ej: Café, Almuerzo, Sube..."></div>'
     +'<div class="fg"><label class="flbl">Ícono (emoji)</label><input type="text" id="favIcon" placeholder="☕" maxlength="2"></div>'
     +'<div class="fg"><label class="flbl">Monto ($)</label><input type="number" id="favMonto" placeholder="2000" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace"></div>'
     +'<div class="fg"><label class="flbl">Categoría</label><select id="favCat">'+catOpts+'</select></div>'
+    +'<div class="fg"><label class="flbl">👛 Billetera</label><select id="favBill">'+billOptsFav+'</select></div>'
     +'<div class="fg"><label class="flbl">Tipo</label><select id="favTipo"><option value="gasto">💸 Gasto</option><option value="ingreso">💰 Ingreso</option></select></div>'
     +'<button class="btn pri" onclick="agregarFav()">Guardar favorito ⭐</button>';
   showModal(html);
@@ -2064,7 +2080,7 @@ function initQKeypad() {
   var billDiv = document.getElementById('qBillBtns');
   if(billDiv) {
     var bills = DB.billeteras||[];
-    var billsSort=[].concat(bills).sort(function(a,b){return b.saldo-a.saldo;});
+    var billsSort=[].concat(DB.billeteras||[]).sort(function(a,b){return b.saldo-a.saldo;});
     qBilletera = billsSort.length ? billsSort[0].id : null;
     billDiv.innerHTML = bills.map(function(b,i){
       var active = i===0;
@@ -2150,7 +2166,8 @@ function usarFav(id) {
   var f = (DB.favoritos||[]).find(function(x){return x.id===id;});
   if(!f) return;
   // Usar primera billetera por defecto (la misma que el teclado rápido)
-  var billId = qBilletera || ((DB.billeteras||[])[0]||{}).id || null;
+  // Billetera: la del favorito > la del widget > la de mayor saldo
+  var billId = f.billetera || qBilletera || ((DB.billeteras||[]).slice().sort(function(a,b){return b.saldo-a.saldo;})[0]||{}).id || null;
   if(billId){
     var bill=(DB.billeteras||[]).find(function(b){return b.id===billId;});
     if(bill) bill.saldo += f.tipo==='gasto' ? -f.monto : f.monto;
@@ -2178,7 +2195,8 @@ function agregarFav() {
   var tipo  = document.getElementById('favTipo').value;
   if(!desc||!monto){toast('⚠️ Completá descripción y monto');return;}
   if(!DB.favoritos) DB.favoritos=[];
-  DB.favoritos.push({id:genId(),desc:desc,monto:monto,cat:cat,icon:icon,tipo:tipo});
+  var favBillId=document.getElementById('favBill')?parseInt(document.getElementById('favBill').value)||null:null;
+  DB.favoritos.push({id:genId(),desc:desc,monto:monto,cat:cat,icon:icon,tipo:tipo,billetera:favBillId});
   saveDB(); toast('⭐ Favorito guardado'); closeModal();
 }
 
