@@ -187,7 +187,7 @@ function daysAgo(n) { var d = new Date(); d.setDate(d.getDate()-n); return d.toI
 function defaultDB() {
   return {
     apiKey:'', ingresos:850000, presupuesto:700000,
-    onboardingDone:false, xp:0, racha:0, logros:[], aiHistory:[], darkMode:true,
+    onboardingDone:false, xp:0, racha:0, logros:[], aiHistory:[], darkMode:true, catsExtra:{},
     dolarCache:null, dolarTs:0,
     billeteras:[
       {id:1,nombre:'Efectivo',icon:'💵',color:'#22c55e',saldo:0},
@@ -305,8 +305,12 @@ function renderOnboarding() {
   var content='';
   if(obStep===0){
     content='<div class="card" style="background:#1e293b;border:none">'
-      +'<div class="fg"><label class="flbl">Ingreso mensual ($)</label><input type="number" id="ob0a" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace"></div>'
-      +'<div class="fg"><label class="flbl">Presupuesto mensual máximo ($)</label><input type="number" id="ob0b" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace"></div>'
+      +'<div class="fg"><label class="flbl">💰 Ingreso mensual ($)</label>'
+      +'<input type="number" id="ob0a" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">Tu sueldo o lo que entra por mes. Solo para referencia.</div></div>'
+      +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($)</label>'
+      +'<input type="number" id="ob0b" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">El tope que te ponés para gastar. El semáforo 🟢🟡🔴 se basa en esto.</div></div>'
       +'</div>';
   } else if(obStep===1){
     content='<div class="card" style="background:#1e293b;border:none">'
@@ -356,7 +360,11 @@ function renderPanel() {
   var lvl=getLevel(), dolar=getDolar();
   var diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
   var diaHoy=new Date().getDate(), diasRest=diasMes-diaHoy;
-  var proyectado=diaHoy>0?(gastos/diaHoy)*diasMes+gastos:0, llegas=proyectado<=DB.presupuesto;
+  var ritmoXDia=diaHoy>0?gastos/diaHoy:0;
+  var proyectado=Math.round(ritmoXDia*diasMes);
+  var llegas=proyectado<=DB.presupuesto;
+  var gastoXDia=Math.round(ritmoXDia);
+  var gastoXDiaIdeal=diaHoy>0?Math.round(DB.presupuesto/diasMes):0;
   var barColor=gp>90?'#ef4444':gp>70?'#f59e0b':'#22c55e';
   var alerts=[];
   Object.keys(gc).forEach(function(cat){var g=gc[cat],p2=PRESUP[cat];if(p2&&g>p2)alerts.push({icon:(CATS[cat]||{}).icon||'⚠️',txt:'Superaste '+((CATS[cat]||{label:cat}).label)+' por '+fmt(g-p2),color:'#ef4444'});});
@@ -415,9 +423,12 @@ function renderPanel() {
     +'<div class="mednum" id="gastosAnim" style="margin:6px 0 10px">'+fmt(0)+'</div>'+pb(gastos,DB.presupuesto,barColor)
     +'<div style="color:#64748b;font-size:12px;margin-top:6px">'+gp+'% del presupuesto</div></div>'
     +'<div class="card"><div class="lbl">Queda este mes</div>'
-    +'<div class="mednum" style="margin:6px 0 8px;color:'+(restante>0?'#22c55e':'#ef4444')+'">'+fmt(Math.abs(restante))+'</div>'
-    +'<div style="color:#64748b;font-size:12px;margin-bottom:8px">'+diasRest+' días restantes</div>'
-    +'<span class="badge '+(llegas?'bg':'br')+'">'+(llegas?'✅ Llegás':'❌ No llegás')+'</span></div></div>'
+    +'<div class="mednum" style="margin:6px 0 6px;color:'+(restante>0?'#22c55e':'#ef4444')+'">'+fmt(Math.abs(restante))+'</div>'
+    +'<div style="color:#64748b;font-size:12px;margin-bottom:2px">'+diasRest+' días restantes</div>'
+    +'<div style="color:#475569;font-size:11px;margin-bottom:8px">Gastás '+fmt(gastoXDia)+'/día · ideal '+fmt(gastoXDiaIdeal)+'/día</div>'
+    +'<span class="badge '+(llegas?'bg':'br')+'">'+(llegas?'✅ Llegás':'❌ No llegás')+'</span>'
+    +'<div style="color:#475569;font-size:11px;margin-top:6px">A este ritmo: '+fmt(proyectado)+' al fin del mes</div>'
+    +'</div></div>'
     +'<div class="card" style="padding:14px 18px"><div style="color:#f59e0b;font-size:13px;font-weight:700;margin-bottom:10px">🔥 Alertas</div>'
     +alerts.map(function(a){return '<div style="display:flex;gap:10px;align-items:flex-start;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px"><span>'+a.icon+'</span><span style="color:'+a.color+'">'+a.txt+'</span></div>';}).join('')+'</div>'
     + pieHtml
@@ -726,12 +737,12 @@ function renderConfig() {
     +'<div class="fg"><label class="flbl">Presupuesto mensual ($)</label><input type="number" id="cfgPres" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
     +'<button class="btn pri" onclick="guardarDatos()">💾 Guardar</button></div>'
     +'<div class="card"><div class="sectitle">📊 Presupuesto por categoría</div>'+presupCats
-    +'<button class="btn pri" onclick="guardarPresupuestos()">💾 Guardar categorías</button></div>'
+    +'<button class="btn pri" onclick="guardarPresupuestos()">💾 Guardar categorías</button></div>'+'<div class="card"><div class="sectitle">🏷️ Categorías personalizadas</div>'+'<div style="color:#64748b;font-size:13px;margin-bottom:12px">Agregá tus propias categorías además de las estándar.</div>'+''+renderCatsExtra()+''+'<button class="btn gho" style="margin-top:8px" onclick="openNuevaCatModal()">+ Nueva categoría</button></div>'
     +'<div class="card"><div class="sectitle">🎯 Tus metas</div>'+metasHtml
     +'<button class="btn gho" style="margin-top:12px" onclick="openModal(\'meta\')">+ Nueva meta</button></div>'
     +'<div class="card"><div class="sectitle">🕐 Transacciones ('+DB.transacciones.length+')</div>'
     +'<div style="max-height:320px;overflow-y:auto">'+txHtml+'</div>'
-    +'<button class="btn dan" style="margin-top:14px" onclick="borrarTodas()">🗑 Borrar todas las transacciones</button></div>'
+    +'<button class="btn dan" style="margin-top:14px" onclick="borrarTodas()">🗑 Borrar todas las transacciones</button></div>'+'<div class="card" style="background:#0a0e1a;border-color:#f9731633"><div class="sectitle" style="color:#f97316">📅 Historial mensual</div>'+'<div style="color:#64748b;font-size:13px;margin-bottom:12px">Los datos de ejemplo de meses anteriores. Podés borrarlos para empezar limpio.</div>'+'<button class="btn dan" onclick="borrarHistorial()">🗑 Borrar historial de ejemplo</button></div>'
     +'<div class="card" style="background:#0a0e1a;border-color:#ef444433"><div class="sectitle" style="color:#ef4444">⚠️ Zona peligrosa</div>'
     +'<div style="color:#64748b;font-size:13px;margin-bottom:12px">Esto borra TODO y no tiene vuelta atrás.</div>'
     +'<button class="btn dan" onclick="resetApp()">🔴 Resetear app completa</button></div>'
@@ -760,7 +771,48 @@ function guardarPresupuestos() {
 }
 function deleteTx(id) { DB.transacciones=DB.transacciones.filter(function(t){return t.id!==id;}); saveDB(); render(); }
 function borrarTodas() { if(!confirm('¿Borrar TODAS las transacciones?'))return; DB.transacciones=[]; saveDB(); toast('✅ Borrado'); render(); }
+function borrarHistorial() { if(!confirm('¿Borrar el historial de meses anteriores?'))return; DB.historialMensual=[]; actualizarHistorialMensual(); saveDB(); toast('✅ Historial borrado'); render(); }
 function resetApp() { if(!confirm('⚠️ ¿Resetear TODO?'))return; localStorage.removeItem(SKEY); DB=defaultDB(); obStep=0; toast('App reseteada'); setTab('panel'); }
+
+// ─── CATEGORÍAS PERSONALIZADAS ────────────────────────────────────────────────
+function getCATSAll() {
+  var all = Object.assign({}, CATS);
+  Object.keys(DB.catsExtra||{}).forEach(function(k){ all[k]=DB.catsExtra[k]; });
+  return all;
+}
+function renderCatsExtra() {
+  var extra = DB.catsExtra||{};
+  var keys = Object.keys(extra);
+  if(keys.length===0) return '<div style="color:#475569;font-size:13px;padding:8px 0">Ninguna todavía.</div>';
+  return keys.map(function(k){
+    var c=extra[k];
+    return '<div style="display:flex;align-items:center;justify-content:space-between;padding:8px 0;border-bottom:1px solid #1e293b">'
+      +'<div style="display:flex;align-items:center;gap:10px"><span style="font-size:22px">'+c.icon+'</span>'
+      +'<div><div style="color:#f8fafc;font-size:14px;font-weight:600">'+c.label+'</div>'
+      +'<div style="color:'+c.color+';font-size:11px">'+k+'</div></div></div>'
+      +'<button class="bsm" style="color:#ef4444" onclick="borrarCat(\''+k+'\')">✕</button></div>';
+  }).join('');
+}
+function agregarCat() {
+  var nombre = document.getElementById('catNombre').value.trim();
+  var icon   = document.getElementById('catIcon').value.trim()||'📌';
+  var color  = document.getElementById('catColor').value||'#94a3b8';
+  if(!nombre){toast('⚠️ Escribí un nombre');return;}
+  var key = nombre.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'');
+  if(!key){toast('⚠️ Nombre inválido');return;}
+  if(!DB.catsExtra) DB.catsExtra={};
+  DB.catsExtra[key]={label:nombre,icon:icon,color:color};
+  CATS[key]={label:nombre,icon:icon,color:color};
+  PRESUP[key]=0;
+  saveDB(); toast('✅ Categoría creada'); closeModal(); render();
+}
+function borrarCat(key) {
+  if(!confirm('¿Borrar la categoría "'+key+'"?'))return;
+  delete DB.catsExtra[key];
+  delete CATS[key];
+  delete PRESUP[key];
+  saveDB(); toast('✅ Categoría borrada'); render();
+}
 
 function editBilletera(id) { var b=(DB.billeteras||[]).find(function(x){return x.id===id;}); if(b)openModal('editBilletera',b); }
 function guardarBilletera(id) {
@@ -809,8 +861,10 @@ function agregarTx() {
   var moneda=document.getElementById('txMoneda')?document.getElementById('txMoneda').value:'ARS';
   var dolarV=getDolar();var tc2=typeof dolarV.venta==='number'?dolarV.venta:1360;
   var montoARS=moneda==='USD'?Math.round(monto*tc2):monto;
-  var fechaTx=new Date().toISOString().split('T')[0];
+  var fechaEl=document.getElementById('txFecha');
+  var fechaTx=fechaEl&&fechaEl.value?fechaEl.value:new Date().toISOString().split('T')[0];
   DB.transacciones.unshift({id:genId(),tipo:tipo,monto:montoARS,montoOrig:monto,moneda:moneda,cat:cat,desc:desc,fecha:fechaTx});
+  DB.transacciones.sort(function(a,b){return b.fecha.localeCompare(a.fecha);});
   actualizarHistorialMensual();
   DB.racha=Math.min(DB.racha+1,365);
   if(DB.logros.indexOf('primer_gasto')<0)DB.logros.push('primer_gasto');
@@ -870,6 +924,7 @@ function openModal(type,data) {
       +'<button class="bsm" id="mUSD" onclick="setMoneda(\'USD\')" style="flex:1">🇺🇸 USD</button>'
       +'</div><input type="hidden" id="txMoneda" value="ARS"></div>'
       +'<div class="fg"><label class="flbl">Categoría</label><select id="txCat">'+catOpts+'</select></div>'
+      +'<div class="fg"><label class="flbl">Fecha</label><input type="date" id="txFecha" value="'+new Date().toISOString().slice(0,10)+'"></div>'
       +'<button class="btn pri" onclick="agregarTx()">Guardar</button>';
   } else if(type==='meta'){
     html='<div class="mtitle"><span>Nueva meta</span><button class="mclose" onclick="closeModal()">✕</button></div>'
@@ -929,6 +984,19 @@ function toggleDeudaTipo() {
   document.getElementById('dMontoSection').style.display=tipo==='libre'?'':'none';
 }
 function closeModal() { document.getElementById('mc').innerHTML=''; }
+function openNuevaCatModal() {
+  var html='<div class="mtitle"><span>🏷️ Nueva categoría</span><button class="mclose" onclick="closeModal()">✕</button></div>'
+    +'<div class="fg"><label class="flbl">Nombre</label><input type="text" id="catNombre" placeholder="Ej: Mascota, Gym, Farmacia..."></div>'
+    +'<div class="fg"><label class="flbl">Ícono (emoji)</label><input type="text" id="catIcon" placeholder="🐶" maxlength="2"></div>'
+    +'<div class="fg"><label class="flbl">Color</label>'
+    +'<div style="display:flex;gap:8px;flex-wrap:wrap">'+['#22c55e','#3b82f6','#f59e0b','#ef4444','#a855f7','#ec4899','#14b8a6','#f97316'].map(function(c){
+      return '<button onclick="document.getElementById(\'catColor\').value=\''+c+'\';document.querySelectorAll(\'.colorBtn\').forEach(function(b){b.style.outline=\'none\'});this.style.outline=\'3px solid #fff\'" '
+        +'class="colorBtn" style="width:32px;height:32px;border-radius:50%;background:'+c+';border:none;cursor:pointer"></button>';
+    }).join('')+'</div>'
+    +'<input type="hidden" id="catColor" value="#22c55e"></div>'
+    +'<button class="btn pri" onclick="agregarCat()">Crear categoría</button>';
+  document.getElementById('mc').innerHTML='<div class="overlay" onclick="if(event.target===this)closeModal()"><div class="modal">'+html+'</div></div>';
+}
 function openFavModal() {
   var catOpts=Object.keys(CATS).map(function(k){return '<option value="'+k+'">'+CATS[k].icon+' '+CATS[k].label+'</option>';}).join('');
   var html='<div class="mtitle"><span>⭐ Nuevo favorito</span><button class="mclose" onclick="closeModal()">✕</button></div>'
@@ -1625,6 +1693,8 @@ function agregarFav() {
 if(DB.darkMode===undefined) DB.darkMode=true;
 document.body.classList.toggle('light',!DB.darkMode);
 var themeBtn=document.getElementById('btnTheme'); if(themeBtn) themeBtn.textContent=DB.darkMode?'🌙':'☀️';
+// Cargar categorías personalizadas guardadas
+Object.keys(DB.catsExtra||{}).forEach(function(k){ CATS[k]=DB.catsExtra[k]; PRESUP[k]=PRESUP[k]||0; });
 actualizarHistorialMensual();
 fetchDolar(true);
 setTimeout(checkNotifications, 3000);
