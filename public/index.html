@@ -698,55 +698,68 @@ function renderHistorial() {
       +'</div>';
   }
 
-  // ── 1. BARRAS INGRESOS VS GASTOS ──────────────────────────────────────────
+  // ── 1. INGRESOS VS GASTOS ─────────────────────────────────────────────────
   var barsHtml = '';
   if(months.length > 0) {
     var maxVal = Math.max.apply(null, months.map(function(m){ return Math.max(m.ingresos||0, m.gastos||0, 1); }));
-    var barRows = months.map(function(m) {
-      var ing = m.ingresos||0, gas = m.gastos||0;
-      var diff = ing - gas;
-      var diffColor = diff >= 0 ? '#22c55e' : '#ef4444';
-      var diffLabel = diff >= 0 ? '+'+fmt(diff) : fmt(diff);
-      var hIng = Math.round((ing/maxVal)*72), hGas = Math.round((gas/maxVal)*72);
-      return '<div style="display:flex;flex-direction:column;align-items:center;gap:3px;flex:1">'
-        // bars
-        +'<div style="width:100%;display:flex;gap:2px;align-items:flex-end;height:72px">'
-        +'<div style="flex:1;background:#22c55e;border-radius:4px 4px 0 0;height:'+hIng+'px;min-height:'+(ing>0?'3':'0')+'px;opacity:0.85"></div>'
-        +'<div style="flex:1;background:#ef4444;border-radius:4px 4px 0 0;height:'+hGas+'px;min-height:'+(gas>0?'3':'0')+'px;opacity:0.85"></div>'
-        +'</div>'
-        +'<div style="font-size:9px;color:#94a3b8;font-weight:600">'+m.mes+'</div>'
-        +'<div style="font-size:9px;color:'+diffColor+';font-weight:700">'+diffLabel+'</div>'
-        +'</div>';
-    }).join('');
-
-    // last month stat cards
     var last = months[months.length-1];
     var lastDiff = (last.ingresos||0) - (last.gastos||0);
     var lastColor = lastDiff >= 0 ? '#22c55e' : '#ef4444';
     var lastLabel = lastDiff >= 0 ? 'Superávit' : 'Déficit';
     var bestMonth = months.reduce(function(best,m){ return (m.ingresos-m.gastos) > (best.ingresos-best.gastos) ? m : best; }, months[0]);
+    var bestDiff = (bestMonth.ingresos||0)-(bestMonth.gastos||0);
+    var bestColor = bestDiff >= 0 ? '#22c55e' : '#ef4444';
+
+    // Barras horizontales por mes — mucho más legibles que verticales
+    var rowBars = months.slice().reverse().map(function(m) {
+      var ing = m.ingresos||0, gas = m.gastos||0;
+      var diff = ing - gas;
+      var dc = diff >= 0 ? '#22c55e' : '#ef4444';
+      var pIng = Math.round((ing/maxVal)*100);
+      var pGas = Math.round((gas/maxVal)*100);
+      return '<div style="margin-bottom:12px">'
+        +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:5px">'
+        +'<span style="color:#94a3b8;font-size:12px;font-weight:600;width:28px">'+m.mes+'</span>'
+        +'<span style="color:'+dc+';font-size:11px;font-weight:700;font-family:monospace">'+(diff>=0?'+':'')+fmt(diff)+'</span>'
+        +'</div>'
+        +'<div style="display:flex;flex-direction:column;gap:3px">'
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<span style="color:#22c55e;font-size:9px;width:10px">▲</span>'
+        +'<div style="flex:1;background:#1e293b;border-radius:99px;height:7px;overflow:hidden">'
+        +'<div style="width:'+pIng+'%;height:100%;background:#22c55e;border-radius:99px;opacity:0.8"></div></div>'
+        +'<span style="color:#64748b;font-size:10px;font-family:monospace;min-width:60px;text-align:right">'+fmt(ing)+'</span>'
+        +'</div>'
+        +'<div style="display:flex;align-items:center;gap:6px">'
+        +'<span style="color:#ef4444;font-size:9px;width:10px">▼</span>'
+        +'<div style="flex:1;background:#1e293b;border-radius:99px;height:7px;overflow:hidden">'
+        +'<div style="width:'+pGas+'%;height:100%;background:#ef4444;border-radius:99px;opacity:0.8"></div></div>'
+        +'<span style="color:#64748b;font-size:10px;font-family:monospace;min-width:60px;text-align:right">'+fmt(gas)+'</span>'
+        +'</div>'
+        +'</div>'
+        +'</div>';
+    }).join('');
 
     barsHtml = '<div class="card" style="background:#0a0f1e;border-color:#1e293b">'
       +'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:16px">'
       +'<div class="sectitle" style="margin:0">📅 Ingresos vs Gastos</div>'
-      +'<div style="display:flex;gap:10px;font-size:11px">'
-      +'<span style="color:#22c55e">■ Ingresos</span><span style="color:#ef4444">■ Gastos</span>'
+      +'<div style="display:flex;gap:10px;font-size:10px;color:#475569">'
+      +'<span>▲ ingresos</span><span>▼ gastos</span>'
       +'</div></div>'
-      +'<div style="display:flex;gap:6px;align-items:flex-end;margin-bottom:16px">'+barRows+'</div>'
-      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px">'
+      + rowBars
+      +'<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-top:4px">'
       +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
       +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Este mes</div>'
-      +'<div style="color:'+lastColor+';font-size:14px;font-weight:800;font-family:monospace">'+fmt(Math.abs(lastDiff))+'</div>'
+      +'<div style="color:'+lastColor+';font-size:13px;font-weight:800;font-family:monospace">'+(lastDiff>=0?'+':'')+fmt(lastDiff)+'</div>'
       +'<div style="color:'+lastColor+';font-size:10px;margin-top:2px">'+lastLabel+'</div>'
       +'</div>'
       +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
       +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Mejor mes</div>'
       +'<div style="color:#f8fafc;font-size:14px;font-weight:800">'+bestMonth.mes+'</div>'
-      +'<div style="color:#22c55e;font-size:10px;margin-top:2px">'+fmt(Math.max(0,bestMonth.ingresos-bestMonth.gastos))+'</div>'
+      +'<div style="color:'+bestColor+';font-size:10px;margin-top:2px">'+(bestDiff>=0?'+':'')+fmt(bestDiff)+'</div>'
       +'</div>'
       +'<div style="background:#0f172a;border-radius:12px;padding:10px;text-align:center">'
-      +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Promedio gastos</div>'
-      +'<div style="color:#f8fafc;font-size:14px;font-weight:800;font-family:monospace">'+fmt(Math.round(months.reduce(function(s,m){return s+(m.gastos||0);},0)/months.length))+'</div>'
+      +'<div style="color:#64748b;font-size:10px;margin-bottom:4px">Prom. gastos</div>'
+      +'<div style="color:#f8fafc;font-size:13px;font-weight:800;font-family:monospace">'+fmt(Math.round(months.reduce(function(s,m){return s+(m.gastos||0);},0)/months.length))+'</div>'
       +'</div>'
       +'</div></div>';
   }
