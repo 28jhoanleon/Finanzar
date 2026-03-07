@@ -1006,13 +1006,18 @@ function renderIA() {
 // ─── CONFIG ───────────────────────────────────────────────────────────────────
 var billSort = 'custom'; // 'alpha' | 'saldo' | 'custom'
 function renderConfig() {
-  var bills = (DB.billeteras||[]).slice();
+  var bills = (DB.billeteras||[]).slice().sort(function(a,b){return (a.orden||0)-(b.orden||0);});
   if(billSort==='alpha') bills.sort(function(a,b){return a.nombre.localeCompare(b.nombre,'es');});
   else if(billSort==='saldo') bills.sort(function(a,b){return b.saldo-a.saldo;});
   var billsHtml = bills.map(function(b,i){
-    return '<div id="bill_'+b.id+'" draggable="true" ondragstart="billDragStart(event,'+b.id+')" ondragover="billDragOver(event,'+b.id+')" ondrop="billDrop(event,'+b.id+')" style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b;cursor:grab">'
+    return '<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid #1e293b">'
       +'<div style="display:flex;align-items:center;gap:10px">'
-      +'<span style="color:#334155;font-size:16px;cursor:grab" title="Arrastrar para reordenar">⠿</span>'
+      +(billSort==='custom'
+        ?'<div style="display:flex;flex-direction:column;gap:2px">'
+          +'<button onclick="moverBill('+b.id+',-1)" style="background:none;border:none;color:'+(i===0?'#1e293b':'#475569')+';font-size:14px;cursor:pointer;padding:0;line-height:1">▲</button>'
+          +'<button onclick="moverBill('+b.id+',1)" style="background:none;border:none;color:'+(i===bills.length-1?'#1e293b':'#475569')+';font-size:14px;cursor:pointer;padding:0;line-height:1">▼</button>'
+          +'</div>'
+        :'<div style="width:24px"></div>')
       +'<span style="font-size:22px">'+b.icon+'</span>'
       +'<div><div style="color:#f8fafc;font-size:14px;font-weight:600">'+b.nombre+'</div>'
       +'<div style="color:'+b.color+';font-size:13px;font-family:monospace;font-weight:700">'+fmt(b.saldo)+'</div></div></div>'
@@ -1138,17 +1143,13 @@ function borrarCat(key) {
 }
 
 var billDragId = null;
-function billDragStart(e, id) { billDragId=id; e.dataTransfer.effectAllowed='move'; }
-function billDragOver(e, id) { e.preventDefault(); e.dataTransfer.dropEffect='move'; }
-function billDrop(e, id) {
-  e.preventDefault();
-  if(billDragId===null||billDragId===id) return;
-  var bills=DB.billeteras;
-  var fromIdx=bills.findIndex(function(b){return b.id===billDragId;});
-  var toIdx=bills.findIndex(function(b){return b.id===id;});
-  if(fromIdx<0||toIdx<0) return;
-  var item=bills.splice(fromIdx,1)[0];
-  bills.splice(toIdx,0,item);
+function moverBill(id, dir) {
+  var bills = DB.billeteras;
+  var idx = bills.findIndex(function(b){return b.id===id;});
+  var newIdx = idx+dir;
+  if(newIdx<0||newIdx>=bills.length) return;
+  var tmp=bills[idx]; bills[idx]=bills[newIdx]; bills[newIdx]=tmp;
+  bills.forEach(function(b,i){b.orden=i;});
   billSort='custom';
   saveDB(); render();
 }
