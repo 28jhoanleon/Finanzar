@@ -517,7 +517,7 @@ function renderPanel() {
     +'<div style="text-align:center;color:#475569"><div style="font-size:22px">➕</div><div style="font-size:12px;margin-top:4px">Nueva</div></div></div></div></div>'
     +'<div class="g2"><div class="card"><div class="lbl">Gastos del mes</div>'
     +'<div class="mednum" id="gastosAnim" style="margin:6px 0 10px">'+fmt(0)+'</div>'
-    +(tienePres?pb(gastos,DB.presupuesto,barColor)+'<div style="color:#64748b;font-size:12px;margin-top:6px">'+gp+'% del límite</div>':'<div style="color:#64748b;font-size:12px;margin-top:6px">Sin límite configurado</div>')+'</div>'
+    +(tieneLimite?pb(gastos,DB.presupuesto,barColor)+'<div style="color:#64748b;font-size:12px;margin-top:6px">'+gp+'% del límite</div>':'<div style="color:#64748b;font-size:12px;margin-top:6px">Sin límite configurado</div>')+'</div>'
     +'<div class="card"><div class="lbl">Queda este mes</div>'
     +'<div class="mednum" style="margin:6px 0 6px;color:'+(restante>0?'#22c55e':'#ef4444')+'">'+fmt(Math.abs(restante))+'</div>'
     +'<div style="color:#64748b;font-size:12px;margin-bottom:2px">'+diasRest+' días restantes · '+fmt(gastoXDia)+'/día</div>'
