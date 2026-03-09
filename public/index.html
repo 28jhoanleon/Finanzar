@@ -187,8 +187,15 @@ function loadDB() {
     // Migration: asignar campo orden si no existe
     if(d.billeteras) {
       d.billeteras.forEach(function(b,i){ if(b.orden===undefined||b.orden===null) b.orden=i; });
-      // Ordenar por orden para garantizar consistencia
       d.billeteras.sort(function(a,b){return (a.orden||0)-(b.orden||0);});
+    }
+    // Migration: limpiar ingresos/presupuesto corruptos (valores absurdamente bajos)
+    // Pasa cuando parseFloat('850.000') = 850 en algunos contextos
+    if(d.ingresos !== undefined && d.ingresos < 500 && d.ingresos > 0) {
+      d.ingresos = 0; // resetear — el usuario lo vuelve a ingresar
+    }
+    if(d.presupuesto !== undefined && d.presupuesto > 0 && d.presupuesto < 500) {
+      d.presupuesto = 0;
     }
     return d;
   }} catch(e) {}
@@ -480,7 +487,12 @@ function renderOnboarding() {
 }
 function rawNum(id) {
   var el=document.getElementById(id); if(!el) return 0;
-  return parseFloat((el.value||'').replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.]/g,''))||0;
+  // Si tiene setupNumInput aplicado, usar _rawVal directamente
+  if(el._rawVal !== undefined && el._rawVal !== '') return parseFloat(el._rawVal)||0;
+  var v=(el.value||'').trim();
+  // Eliminar todo lo que no sea número (puntos de miles, espacios, $)
+  v=v.replace(/[^0-9]/g,'');
+  return parseFloat(v)||0;
 }
 function obSinSueldo() {
   // Pasa al siguiente paso sin requerir sueldo
@@ -1162,12 +1174,24 @@ function togglePresupuesto() {
     var el=document.getElementById('cfgPres'); if(el) el.focus();
   }
 }
+function initCfgInputs() {
+  setTimeout(function(){
+    var ids=['cfgIng','cfgPres'];
+    ids.forEach(function(id){
+      var el=document.getElementById(id);
+      if(el){ el._fmtReady=false; setupNumInput(el); }
+    });
+  },50);
+}
 function guardarDatos() {
   var ing=rawNum('cfgIng');
   var presEl=document.getElementById('presupuestoInput');
   var pres=(presEl&&presEl.style.display!=='none')?rawNum('cfgPres'):DB.presupuesto;
   if(!ing){toast('⚠️ Ingresá tu ingreso mensual');return;}
-  DB.ingresos=ing; DB.presupuesto=pres||0; saveDB(); toast('✅ Datos guardados');
+  if(ing < 1000){toast('⚠️ El ingreso parece muy bajo. Revisá el valor.');return;}
+  DB.ingresos=ing; DB.presupuesto=pres||0; saveDB(); 
+  toast('✅ Guardado — Ingreso: '+fmt(ing)+(pres?(' · Presupuesto: '+fmt(pres)):''));
+  render();
 }
 function guardarPresupuestos() {
   ['comida','transporte','salidas','servicios','ropa'].forEach(function(cat){
@@ -1666,6 +1690,7 @@ function render() {
   else if(currentTab==='config')    c.innerHTML=renderConfig();
   animBars();
   if(currentTab==='panel'){countUp('saldoAnim',getSaldo());countUp('gastosAnim',getGastosMes());}
+  setTimeout(function(){document.querySelectorAll('#mainContent input[inputmode="numeric"]').forEach(setupNumInput);},80);
   window.scrollTo({top:0,behavior:'smooth'});
   // Attach formatted inputs
   setTimeout(function(){
