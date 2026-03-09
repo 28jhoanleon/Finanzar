@@ -222,6 +222,7 @@ function defaultDB() {
   };
 }
 var DB = loadDB();
+var modoPrivado = false;
 
 // ─── CONSTANTS ────────────────────────────────────────────────────────────────
 var CATS = {
@@ -578,7 +579,9 @@ function renderPanel() {
   }
 
   return '<div class="card" style="background:linear-gradient(135deg,#0f172a 0%,#1e1b4b 100%);text-align:center;padding:28px 20px;border-color:#3b82f644;box-shadow:0 0 24px #3b82f622">'
-    +'<div class="lbl">Saldo Total Real</div><div class="bignum" id="saldoAnim">'+fmt(0)+'</div>'
+    +'<div class="lbl" style="cursor:pointer" onclick="toggleSaldoUSD()" title="Tocá para ver en USD">Saldo Total Real <span style="font-size:10px;color:#475569">↕ USD</span></div>'
+    +'<div class="bignum" id="saldoAnim" onclick="toggleSaldoUSD()" style="cursor:pointer">'+fmt(0)+'</div>'
+    +'<div id="saldoUSD" style="display:none;color:#4ade80;font-size:14px;font-weight:700;margin-top:4px;font-family:monospace"></div>'
     +'<div style="display:flex;align-items:center;justify-content:center;gap:8px;margin-top:10px"><span style="font-size:24px">'+sem.emoji+'</span><span style="color:#94a3b8;font-size:14px">'+sem.msg+'</span></div>'
     +'<div style="margin-top:14px;display:flex;align-items:center;justify-content:center;gap:10px;flex-wrap:wrap">'
     +'<div class="lvlbadge">⚡ Nivel '+lvl.n+' — '+lvl.name+'</div>'
@@ -1000,7 +1003,10 @@ function renderIA() {
       +'<div style="color:#64748b;font-size:13px;margin-bottom:16px;line-height:1.5">Ingresá tu API key de Anthropic para consejos basados en tus datos.</div>'
       +'<div style="text-align:left;margin-bottom:12px"><label class="flbl">API Key de Anthropic</label>'
       +'<input type="text" id="apiKeyInput" placeholder="sk-ant-..." style="font-family:monospace;font-size:13px">'
-      +'<div style="color:#475569;font-size:11px;margin-top:6px">Conseguila gratis en console.anthropic.com</div></div>'
+      +'<div style="margin-top:8px;padding:10px;background:#0a0f1e;border-radius:10px;font-size:12px;color:#64748b;line-height:1.6">'
+      +'<strong style="color:#94a3b8">¿Qué es esto?</strong> Es una clave para acceder a la IA de Anthropic.<br>'
+      +'<a href="https://console.anthropic.com/settings/keys" target="_blank" style="color:#60a5fa;font-weight:700">👉 Obtener mi clave gratis</a> — creás cuenta gratuita, vas a API Keys y copiás la clave.'
+      +'<br><span style="color:#475569">Empieza con <code style="color:#94a3b8">sk-ant-</code></span></div>'
       +'<button class="btn pri" onclick="saveApiKey()">Conectar IA</button></div>'
     :'<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:14px">'
       +'<span style="color:#22c55e;font-size:13px;font-weight:600">🟢 IA Conectada</span>'
