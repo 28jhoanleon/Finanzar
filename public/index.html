@@ -441,11 +441,12 @@ function renderOnboarding() {
   if(obStep===0){
     content='<div class="card" style="background:#1e293b;border:none">'
       +'<div class="fg"><label class="flbl">💰 Tu sueldo o ingreso mensual ($)</label>'
-      +'<input type="number" id="ob0a" value="'+(DB.ingresos||'')+'" placeholder="Ej: 800.000" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
-      +'<div style="color:#475569;font-size:11px;margin-top:5px">Solo para referencia y cálculos. No se registra como transacción.</div></div>'
+      +'<input type="text" id="ob0a" value="'+(DB.ingresos?Math.round(DB.ingresos).toLocaleString('es-AR'):'')+'" placeholder="Ej: 850.000" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">Solo para referencia y cálculos. Podés cambiarlo después.</div></div>'
       +'<div class="fg"><label class="flbl">🎯 Límite de gastos por mes ($) <span style="color:#475569;font-weight:400;font-size:10px">opcional</span></label>'
-      +'<input type="number" id="ob0b" value="" placeholder="Dejalo vacío si no sabés" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
-      +'<div style="color:#475569;font-size:11px;margin-top:5px">Si lo completás, el semáforo 🟢🟡🔴 lo usa. Si no, mostramos el saldo real sin juzgar.</div></div>'
+      +'<input type="text" id="ob0b" value="" placeholder="Dejalo vacío si no sabés" inputmode="numeric" style="font-size:20px;font-weight:700;font-family:monospace">'
+      +'<div style="color:#475569;font-size:11px;margin-top:5px">Si lo completás, el semáforo 🟢🟡🔴 lo usa. Si no, mostramos el saldo real.</div></div>'
+      +'<button onclick="obSinSueldo()" style="width:100%;margin-top:4px;background:none;border:1px dashed #334155;border-radius:12px;padding:12px;color:#475569;font-size:13px;font-weight:600;cursor:pointer;font-family:inherit">⏳ Todavía no cobré este mes</button>'
       +'</div>';
   } else if(obStep===1){
     content='<div class="card" style="background:#1e293b;border:none">'
@@ -481,11 +482,17 @@ function rawNum(id) {
   var el=document.getElementById(id); if(!el) return 0;
   return parseFloat((el.value||'').replace(/\./g,'').replace(/,/g,'.').replace(/[^0-9.]/g,''))||0;
 }
+function obSinSueldo() {
+  // Pasa al siguiente paso sin requerir sueldo
+  DB.ingresos = 0; DB.presupuesto = 0;
+  saveDB(); obStep++; render();
+  setTimeout(function(){ document.querySelectorAll('.content input[inputmode="numeric"]').forEach(setupNumInput); },80);
+  toast('💡 Podés configurarlo después en Config');
+}
 function obNext() {
   if(obStep===0){
     var a=rawNum('ob0a'), b=rawNum('ob0b');
-    if(!a){toast('⚠️ Ingresá tu sueldo mensual');return;}
-    DB.ingresos=a; DB.presupuesto=b;
+    DB.ingresos=a||0; DB.presupuesto=b||0;
   } else if(obStep===1){
     (DB.billeteras||[]).forEach(function(b){var el=document.getElementById('ob1_'+b.id);if(el)b.saldo=rawNum('ob1_'+b.id);});
   } else {
@@ -504,10 +511,10 @@ function renderPanel() {
   if(!DB.onboardingDone) return renderOnboarding();
   var saldo=getSaldo(), gastos=getGastosMes(), gc=getGastosCat();
   var tieneLimite=DB.presupuesto>0;
-  var limiteRef=tieneLimite?DB.presupuesto:DB.ingresos;
-  var gp=tieneLimite?pct(gastos,limiteRef):pct(gastos,DB.ingresos);
-  var sem=tieneLimite?semaforo(gp):{emoji:'💙',msg:'Sin límite configurado'};
-  var restante=saldo-gastos; // basado en saldo real
+  var limiteRef=tieneLimite?DB.presupuesto:0;
+  var gp=tieneLimite?pct(gastos,limiteRef):0;
+  var sem=tieneLimite?semaforo(gp):{emoji:'💙',msg:'Sin límite — usás lo que tenés'};
+  var restante=tieneLimite?(limiteRef-gastos):(saldo-gastos);
   var lvl=getLevel(), dolar=getDolar();
   var diasMes=new Date(new Date().getFullYear(),new Date().getMonth()+1,0).getDate();
   var diaHoy=new Date().getDate(), diasRest=diasMes-diaHoy;
@@ -1112,8 +1119,8 @@ function renderConfig() {
     +billsHtml
     +'<button class="btn gho" style="margin-top:12px" onclick="openModal(\'billetera\')">+ Nueva billetera</button></div>'
     +'<div class="card"><div class="sectitle">👤 Tus datos</div>'
-    +'<div class="fg"><label class="flbl">Ingreso mensual ($)</label><input type="number" id="cfgIng" value="'+DB.ingresos+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
-    +'<div class="fg"><label class="flbl">Presupuesto mensual ($)</label><input type="number" id="cfgPres" value="'+DB.presupuesto+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
+    +'<div class="fg"><label class="flbl">Ingreso mensual ($)</label><input type="text" id="cfgIng" value="'+(DB.ingresos?Math.round(DB.ingresos).toLocaleString('es-AR'):'')+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
+    +'<div class="fg"><label class="flbl">Presupuesto mensual ($) <span style="color:#475569;font-size:11px">opcional</span></label><input type="text" id="cfgPres" value="'+(DB.presupuesto?Math.round(DB.presupuesto).toLocaleString('es-AR'):'')+'" inputmode="numeric" placeholder="Dejalo vacío si no querés límite" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
     +'<button class="btn pri" onclick="guardarDatos()">💾 Guardar</button></div>'
     +'<div class="card"><div class="sectitle">📊 Presupuesto por categoría</div>'+presupCats
     +'<button class="btn pri" onclick="guardarPresupuestos()">💾 Guardar categorías</button></div>'+'<div class="card"><div class="sectitle">🏷️ Categorías personalizadas</div>'+'<div style="color:#64748b;font-size:13px;margin-bottom:12px">Agregá tus propias categorías además de las estándar.</div>'+''+renderCatsExtra()+''+'<button class="btn gho" style="margin-top:8px" onclick="openNuevaCatModal()">+ Nueva categoría</button></div>'
@@ -1136,10 +1143,31 @@ function renderConfig() {
 }
 
 // ─── ACTIONS ──────────────────────────────────────────────────────────────────
+function togglePresupuesto() {
+  if(DB.presupuesto>0) {
+    // Desactivar
+    DB.presupuesto=0; saveDB();
+    var btn=document.getElementById('btnTogglePres');
+    var inp=document.getElementById('presupuestoInput');
+    if(btn){btn.textContent='⭕ Desactivado';btn.style.background='#1e293b';btn.style.borderColor='#334155';btn.style.color='#64748b';}
+    if(inp) inp.style.display='none';
+    toast('⭕ Presupuesto desactivado');
+    render();
+  } else {
+    // Activar
+    var btn=document.getElementById('btnTogglePres');
+    var inp=document.getElementById('presupuestoInput');
+    if(btn){btn.textContent='✅ Activado';btn.style.background='#22c55e22';btn.style.borderColor='#22c55e55';btn.style.color='#4ade80';}
+    if(inp) inp.style.display='block';
+    var el=document.getElementById('cfgPres'); if(el) el.focus();
+  }
+}
 function guardarDatos() {
-  var ing=parseFloat(document.getElementById('cfgIng').value), pres=parseFloat(document.getElementById('cfgPres').value);
-  if(!ing||!pres){toast('⚠️ Ingresá valores válidos');return;}
-  DB.ingresos=ing; DB.presupuesto=pres; saveDB(); toast('✅ Datos guardados');
+  var ing=rawNum('cfgIng');
+  var presEl=document.getElementById('presupuestoInput');
+  var pres=(presEl&&presEl.style.display!=='none')?rawNum('cfgPres'):DB.presupuesto;
+  if(!ing){toast('⚠️ Ingresá tu ingreso mensual');return;}
+  DB.ingresos=ing; DB.presupuesto=pres||0; saveDB(); toast('✅ Datos guardados');
 }
 function guardarPresupuestos() {
   ['comida','transporte','salidas','servicios','ropa'].forEach(function(cat){
@@ -1379,8 +1407,6 @@ function guardarCobro() {
     billetera: distribs[0].bill.id,
     fecha: new Date().toISOString().slice(0,10)
   });
-  // Actualizar ingreso mensual en DB
-  DB.ingresos = totalCobro;
   actualizarHistorialMensual();
   DB.racha = Math.min(DB.racha+1,365);
   saveDB();
