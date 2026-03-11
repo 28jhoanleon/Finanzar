@@ -1610,7 +1610,7 @@ function openModal(type,data) {
       +'<option value="libre">💸 Monto total a pagar</option>'
       +'</select></div>'
       +'<div id="dCuotasSection">'
-      +'<div class="fg"><label class="flbl">Monto de cada cuota ($)</label><input type="number" id="dCuota" placeholder="15000" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
+      +'<div class="fg"><label class="flbl">Monto de cada cuota ($)</label><input type="text" id="dCuota" placeholder="Ej: 38.000" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
       +'<div class="fg"><label class="flbl">Cuotas restantes</label><input type="number" id="dCuotas" placeholder="12" inputmode="numeric"></div>'
       +'</div>'
       +'<div id="dMontoSection" style="display:none">'
@@ -1777,7 +1777,7 @@ function renderDeudas() {
     + '<div class="card" style="background:#0a0e1a;border-color:#f9731633;text-align:center">'
     + '<div class="lbl">Cuotas este mes</div>'
     + '<div style="color:#f97316;font-size:22px;font-weight:800;font-family:monospace;margin-top:6px">' + fmt(totalMensual) + '</div>'
-    + '<div style="color:#64748b;font-size:11px;margin-top:4px">' + Math.round((totalMensual/DB.ingresos)*100) + '% del sueldo</div>'
+    + '<div style="color:#64748b;font-size:11px;margin-top:4px">' +(DB.ingresos>0 ? Math.round((totalMensual/DB.ingresos)*100)+'% del sueldo' : 'Configurá tu sueldo') + '</div>'
     + '</div></div>';
 
   var lista = deudas.length === 0
@@ -1827,7 +1827,7 @@ function renderDeudas() {
   var alertas = '';
   var cuotasAltas = deudas.filter(function(d){ return d.activa && d.interes >= 80; });
   if(cuotasAltas.length > 0) alertas += '<div style="display:flex;gap:10px;padding:8px 0;border-bottom:1px solid #1e293b;font-size:13px"><span>⚠️</span><span style="color:#ef4444">Tenés deudas con interés muy alto (+80% TNA). Priorizar cancelarlas primero.</span></div>';
-  var pesoSueldo = Math.round((totalMensual/DB.ingresos)*100);
+  var pesoSueldo = DB.ingresos>0 ? Math.round((totalMensual/DB.ingresos)*100) : 0;
   if(pesoSueldo > 30) alertas += '<div style="display:flex;gap:10px;padding:8px 0;font-size:13px"><span>🚨</span><span style="color:#f97316">Tus cuotas son el ' + pesoSueldo + '% de tu sueldo. Lo ideal es menos del 30%.</span></div>';
   if(!alertas) alertas = '<div style="display:flex;gap:10px;padding:8px 0;font-size:13px"><span>✅</span><span style="color:#22c55e">Deudas bajo control.</span></div>';
 
@@ -1871,15 +1871,15 @@ function agregarDeuda() {
   var deuda = { id:genId(), nombre:nombre, tipo:tipo, acreedor:acreedor, icon:icon, activa:true };
 
   if(tipo === 'cuotas') {
-    var cuota  = parseFloat(document.getElementById('dCuota').value);
-    var cuotas = parseInt(document.getElementById('dCuotas').value);
+    var cuota  = rawNum('dCuota');
+    var cuotas = parseInt(document.getElementById('dCuotas').value)||0;
     if(!cuota||!cuotas) { toast('⚠️ Ingresá cuota y cantidad'); return; }
     deuda.cuota = cuota;
     deuda.cuotasRestantes = cuotas;
     deuda.cuotasTotales = cuotas;
     deuda.interes = parseFloat(document.getElementById('dInteres').value)||0;
   } else {
-    var monto = parseFloat(document.getElementById('dMonto').value);
+    var monto = rawNum('dMonto');
     if(!monto) { toast('⚠️ Ingresá el monto'); return; }
     deuda.montoTotal = monto;
     deuda.montoPagado = 0;
@@ -1889,6 +1889,40 @@ function agregarDeuda() {
   if(!DB.deudas) DB.deudas = [];
   DB.deudas.push(deuda);
   saveDB(); addXP(10,'Deuda registrada'); closeModal(); setTab('deudas');
+}
+function editarDeuda(id) {
+  var d = (DB.deudas||[]).find(function(x){ return x.id===id; });
+  if(!d) return;
+  var html = '<div class="mtitle"><span>✏️ Editar deuda</span><button class="mclose" onclick="closeModal()">✕</button></div>'
+    + '<div class="fg"><label class="flbl">Nombre</label><input type="text" id="edNombre" value="'+d.nombre+'"></div>'
+    + '<div class="fg"><label class="flbl">Acreedor</label><input type="text" id="edAcreedor" value="'+(d.acreedor||'')+'"></div>'
+    + '<div class="fg"><label class="flbl">Ícono</label><input type="text" id="edIcon" value="'+(d.icon||'💳')+'" maxlength="2" style="font-size:22px;width:60px"></div>';
+  if(d.tipo === 'cuotas') {
+    html += '<div class="fg"><label class="flbl">Monto de cada cuota ($)</label><input type="text" id="edCuota" value="'+Math.round(d.cuota).toLocaleString('es-AR')+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
+      + '<div class="fg"><label class="flbl">Cuotas restantes</label><input type="number" id="edCuotas" value="'+d.cuotasRestantes+'" inputmode="numeric"></div>'
+      + '<div class="fg"><label class="flbl">Cuotas totales</label><input type="number" id="edCuotasTotales" value="'+(d.cuotasTotales||d.cuotasRestantes)+'" inputmode="numeric"></div>';
+  } else {
+    html += '<div class="fg"><label class="flbl">Monto total ($)</label><input type="text" id="edMonto" value="'+Math.round(d.montoTotal).toLocaleString('es-AR')+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>'
+      + '<div class="fg"><label class="flbl">Monto pagado ($)</label><input type="text" id="edPagado" value="'+Math.round(d.montoPagado||0).toLocaleString('es-AR')+'" inputmode="numeric" style="font-size:18px;font-weight:700;font-family:monospace"></div>';
+  }
+  html += '<button class="btn pri" onclick="guardarEditDeuda('+id+')">💾 Guardar cambios</button>';
+  showModal(html);
+}
+function guardarEditDeuda(id) {
+  var d = (DB.deudas||[]).find(function(x){ return x.id===id; });
+  if(!d) return;
+  var nom = document.getElementById('edNombre'); if(nom&&nom.value.trim()) d.nombre=nom.value.trim();
+  var acr = document.getElementById('edAcreedor'); if(acr) d.acreedor=acr.value.trim();
+  var ico = document.getElementById('edIcon'); if(ico&&ico.value.trim()) d.icon=ico.value.trim();
+  if(d.tipo === 'cuotas') {
+    var c = rawNum('edCuota'); if(c>0) d.cuota=c;
+    var cr = document.getElementById('edCuotas'); if(cr) d.cuotasRestantes=parseInt(cr.value)||d.cuotasRestantes;
+    var ct = document.getElementById('edCuotasTotales'); if(ct) d.cuotasTotales=parseInt(ct.value)||d.cuotasTotales;
+  } else {
+    var m = rawNum('edMonto'); if(m>0) d.montoTotal=m;
+    var p = rawNum('edPagado'); d.montoPagado=p;
+  }
+  saveDB(); toast('✅ Deuda actualizada'); closeModal(); render();
 }
 function pagarDeudaLibre(id) {
   var monto = parseFloat(document.getElementById('pagoMonto').value);
